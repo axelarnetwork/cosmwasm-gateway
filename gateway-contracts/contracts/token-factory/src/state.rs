@@ -3,22 +3,24 @@ use serde::{Deserialize, Serialize};
 
 use cosmwasm_std::{from_slice, CanonicalAddr, ReadonlyStorage, StdError, StdResult, Storage};
 use cosmwasm_storage::{
-    singleton, singleton_read, PrefixedStorage, ReadonlyPrefixedStorage, ReadonlySingleton,
-    Singleton,
+    singleton, singleton_read, PrefixedStorage, ReadonlyPrefixedStorage
 };
 
-pub static OWNER_KEY: &[u8] = b"owner";
+pub static KEY_CONFIG: &[u8] = b"owner";
 pub static PREFIX_TOKEN_ADDRESSES: &[u8] = b"command_addresses";
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
-pub struct SomeSate {}
-
-pub fn owner<S: Storage>(storage: &mut S) -> Singleton<S, CanonicalAddr> {
-    singleton(storage, OWNER_KEY)
+pub struct Config {
+    pub owner: CanonicalAddr,
+    pub token_code_id: u64,
 }
 
-pub fn owner_read<S: Storage>(storage: &S) -> ReadonlySingleton<S, CanonicalAddr> {
-    singleton_read(storage, OWNER_KEY)
+pub fn config_store<S: Storage>(storage: &mut S, data: &Config) -> StdResult<()> {
+    singleton(storage, KEY_CONFIG).save(data)
+}
+
+pub fn config_read<S: Storage>(storage: &S) -> StdResult<Config> {
+    singleton_read(storage, KEY_CONFIG).load()
 }
 
 pub fn token_address_store<S: Storage>(
