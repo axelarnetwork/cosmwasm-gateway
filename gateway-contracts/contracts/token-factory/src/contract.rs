@@ -174,8 +174,15 @@ mod tests {
         let mut deps = mock_dependencies(20, &coins(2, "token"));
 
         let master_address = HumanAddr::from("master_address");
+        let canon_master_address = deps.api.canonical_address(&master_address).unwrap();
         let env = mock_env(master_address.clone(), &coins(2, "token"));
-        let _res = init(&mut deps, env, InitMsg {}).unwrap();
+
+        let init_msg = InitMsg {
+            owner: canon_master_address.clone(),
+            token_code_id: 1000,
+            init_hook: None,
+        };
+        let _res = init(&mut deps, env, init_msg).unwrap();
 
         let unauth_env = mock_env("anyone", &coins(2, "token"));
 
