@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::{from_slice, CanonicalAddr, ReadonlyStorage, StdError, StdResult, Storage};
+use cosmwasm_std::{CanonicalAddr, HumanAddr, ReadonlyStorage, StdError, StdResult, Storage};
 use cosmwasm_storage::{
     singleton, singleton_read, PrefixedStorage, ReadonlyPrefixedStorage
 };
@@ -25,25 +25,26 @@ pub fn config_read<S: Storage>(storage: &S) -> StdResult<Config> {
 
 pub fn token_address_store<S: Storage>(
     storage: &mut S,
-    token_symbol: &String,
+    symbol: &String,
     address: &CanonicalAddr,
 ) -> StdResult<()> {
     PrefixedStorage::new(PREFIX_TOKEN_ADDRESSES, storage)
-        .set(token_symbol.as_bytes(), address.as_slice());
+        .set(symbol.as_bytes(), address.as_slice());
 
     Ok(())
 }
 
 pub fn token_address_read<S: Storage>(
     storage: &S,
-    token_symbol: &String,
+    symbol: &String,
 ) -> StdResult<CanonicalAddr> {
     let res =
-        ReadonlyPrefixedStorage::new(PREFIX_TOKEN_ADDRESSES, storage).get(token_symbol.as_bytes());
+        ReadonlyPrefixedStorage::new(PREFIX_TOKEN_ADDRESSES, storage).get(symbol.as_bytes());
     match res {
-        Some(data) => from_slice(&data),
+        //Some(data) => from_slice(&data),
+        Some(data) => Ok(CanonicalAddr::from(data)),
         None => Err(StdError::generic_err(
-            "there is no registered token address",
+            "no registered token address",
         )),
     }
 }

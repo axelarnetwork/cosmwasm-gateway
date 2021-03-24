@@ -1,12 +1,12 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use cosmwasm_std::{CanonicalAddr};
+use cosmwasm_std::{HumanAddr, Uint128};
 
 use  crate::hook::InitHook;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InitMsg {
-    pub owner: CanonicalAddr,
+    pub owner: HumanAddr,
     pub token_code_id: u64,
     pub init_hook: Option<InitHook>,
 }
@@ -18,8 +18,15 @@ pub enum HandleMsg {
         name: String,
         symbol: String,
         decimals: u8,
-        cap: u128,
+        cap: Uint128,
     },
+    Withdraw {
+        symbol: String,
+        address: String, // support arbitrary cross chain addresses
+    },
+    Register {
+        symbol: String,
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -32,6 +39,6 @@ pub enum QueryMsg {
 // We define a custom struct for each query response
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
-    pub owner: CanonicalAddr,
+    pub owner: HumanAddr,
     pub token_code_id: u64,
 }
