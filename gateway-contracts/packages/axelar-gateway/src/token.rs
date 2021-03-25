@@ -64,6 +64,11 @@ fn is_valid_symbol(symbol: &str) -> bool {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum HandleMsg {
+    /// Withdraw is a custom Axelar Gateway message to initate a cross-chain transfer
+    Withdraw {
+        recipient: HumanAddr,
+        amount: Uint128,
+    },
     /// Transfer is a base message to move tokens to another account without triggering actions
     Transfer {
         recipient: HumanAddr,
@@ -84,37 +89,26 @@ pub enum HandleMsg {
         recipient: HumanAddr,
         amount: Uint128,
     },
-    /// Only with "approval" extension. Allows spender to access an additional amount tokens
-    /// from the owner's (env.sender) account. If expires is Some(), overwrites current allowance
-    /// expiration with this one.
-    IncreaseAllowance {
-        spender: HumanAddr,
-        amount: Uint128,
-        expires: Option<Expiration>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum QueryMsg {
+    /// Returns the current balance of the given address, 0 if unset.
+    /// Return type: BalanceResponse.
+    Balance { address: HumanAddr },
+    /// Returns metadata on the contract - name, decimals, supply, etc.
+    /// Return type: TokenInfoResponse.
+    TokenInfo {},
+    /// Only with "mintable" extension.
+    /// Returns who can mint and how much.
+    /// Return type: MinterResponse.
+    Minter {},
+    /// Only with "enumerable" extension
+    /// Returns all accounts that have balances. Supports pagination.
+    /// Return type: AllAccountsResponse.
+    AllAccounts {
+        start_after: Option<HumanAddr>,
+        limit: Option<u32>,
     },
-    /// Only with "approval" extension. Lowers the spender's access of tokens
-    /// from the owner's (env.sender) account by amount. If expires is Some(), overwrites current
-    /// allowance expiration with this one.
-    DecreaseAllowance {
-        spender: HumanAddr,
-        amount: Uint128,
-        expires: Option<Expiration>,
-    },
-    /// Only with "approval" extension. Transfers amount tokens from owner -> recipient
-    /// if `env.sender` has sufficient pre-approval.
-    TransferFrom {
-        owner: HumanAddr,
-        recipient: HumanAddr,
-        amount: Uint128,
-    },
-    /// Only with "approval" extension. Sends amount tokens from owner -> contract
-    /// if `env.sender` has sufficient pre-approval.
-    SendFrom {
-        owner: HumanAddr,
-        contract: HumanAddr,
-        amount: Uint128,
-        msg: Option<Binary>,
-    },
-    /// Only with "approval" extension. Destroys tokens forever
-    BurnFrom { owner: HumanAddr, amount: Uint128 },
 }

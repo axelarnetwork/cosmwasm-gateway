@@ -1,15 +1,17 @@
 use cosmwasm_std::{
-    Api, Binary, CosmosMsg, Env, Extern, HandleResult, InitResponse, MigrateResult, Querier, StdError, StdResult, Storage, WasmMsg,
+    HandleResponse, log, HumanAddr,
+    Api, Binary, Uint128, CosmosMsg, Env, Extern, HandleResult, InitResponse, MigrateResult, Querier, StdError, StdResult, Storage, WasmMsg, to_binary
 };
 
 use cw2::set_contract_version;
 use cw20_base::contract::{
-    create_accounts, handle as cw20_handle, migrate as cw20_migrate, query as cw20_query,
-};
-use cw20_base::msg::{HandleMsg, MigrateMsg, QueryMsg};
+    create_accounts, handle_send as cw20_handle_send, handle_transfer as cw20_handle_transfer, migrate as cw20_migrate, query as cw20_query, query_balance, query_minter, query_token_info, handle_mint as cw20_handle_mint };
+use cw20_base::enumerable::{query_all_accounts};
+use cw20_base::state::{token_info_read, balances};
+use cw20_base::msg::{MigrateMsg};
 use cw20_base::state::{token_info, MinterData, TokenInfo};
 
-use axelar_gateway::token::InitMsg;
+use axelar_gateway::token::{InitMsg,HandleMsg,QueryMsg};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:cw20-base";
@@ -77,7 +79,17 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
     env: Env,
     msg: HandleMsg,
 ) -> HandleResult {
-    cw20_handle(deps, env, msg)
+    match msg {
+        HandleMsg::Withdraw { recipient, amount } => handle_withdraw(deps, env, recipient, amount),
+        HandleMsg::Transfer { recipient, amount } => cw20_handle_transfer(deps, env, recipient, amount),
+        HandleMsg::Burn { amount } => handle_burn(deps, env, amount),
+        HandleMsg::Send {
+            contract,
+            amount,
+            msg,
+        } => cw20_handle_send(deps, env, contract, amount, msg),
+        HandleMsg::Mint { recipient, amount } => cw20_handle_mint(deps, env, recipient, amount),
+    }
 }
 
 pub fn migrate<S: Storage, A: Api, Q: Querier>(
@@ -92,7 +104,92 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     msg: QueryMsg,
 ) -> StdResult<Binary> {
-    cw20_query(deps, msg)
+    match msg {
+        QueryMsg::Balance { address } => to_binary(&query_balance(deps, address)?),
+        QueryMsg::TokenInfo {} => to_binary(&query_token_info(deps)?),
+        QueryMsg::Minter {} => to_binary(&query_minter(deps)?),
+        QueryMsg::AllAccounts { start_after, limit } => {
+            to_binary(&query_all_accounts(deps, start_after, limit)?)
+        }
+    }
+}
+
+pub fn handle_withdraw<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    recipient: HumanAddr,
+    amount: Uint128,
+) -> StdResult<HandleResponse> {
+    if amount == Uint128::zero() {
+        return Err(StdError::generic_err("Invalid zero amount"));
+    }
+
+    let sender_raw = deps.api.canonical_address(&env.message.sender)?;
+
+    // lower balance
+    let mut accounts = balances(&mut deps.storage);
+    accounts.update(sender_raw.as_slice(), |balance: Option<Uint128>| {
+        balance.unwrap_or_default() - amount
+    })?;
+    // reduce total_supply
+    token_info(&mut deps.storage).update(|mut info| {
+        info.total_supply = (info.total_supply - amount)?;
+        Ok(info)
+    })?;
+
+    let res = HandleResponse {
+        messages: vec![],
+        log: vec![
+            log("action", "withdraw"),
+            log("from", deps.api.human_address(&sender_raw)?),
+            log("to", recipient),
+            log("amount", amount),
+        ],
+        data: None,
+    };
+    Ok(res)
+}
+
+pub fn handle_burn<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    amount: Uint128,
+) -> StdResult<HandleResponse> {
+    if amount == Uint128::zero() {
+        return Err(StdError::generic_err("Invalid zero amount"));
+    }
+
+    let mut config = token_info_read(&deps.storage).load()?;
+    if config.mint.is_none()
+        || config.mint.as_ref().unwrap().minter
+            != deps.api.canonical_address(&env.message.sender)?
+    {
+        return Err(StdError::unauthorized());
+    }
+
+    let sender_raw = deps.api.canonical_address(&env.message.sender)?;
+
+    // lower balance
+    let mut accounts = balances(&mut deps.storage);
+    accounts.update(sender_raw.as_slice(), |balance: Option<Uint128>| {
+        balance.unwrap_or_default() - amount
+    })?;
+    // reduce total_supply
+    token_info(&mut deps.storage).update(|mut info| {
+        info.total_supply = (info.total_supply - amount)?;
+        Ok(info)
+    })?;
+
+    let res = HandleResponse {
+        messages: vec![],
+        log: vec![
+            log("action", "burn"),
+            log("from", deps.api.human_address(&sender_raw)?),
+            log("amount", amount),
+        ],
+        data: None,
+    };
+    Ok(res)
 }
 
 #[cfg(test)]

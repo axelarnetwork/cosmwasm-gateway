@@ -109,6 +109,7 @@ fn deploy_token() {
                 decimals: 8,
                 initial_balances: vec![],
                 mint: Some(MinterResponse {
+                    // minter should be the proxy contract (master address)
                     minter: env.message.sender.clone(),
                     cap: Some(cap.clone()),
                 }),
@@ -192,6 +193,7 @@ fn register() {
         _ => panic!("must return already registered error"),
     }
     
+    // todo: check for exact error 
     // attempt to regsiter token that was not instantiated
     let msg = HandleMsg::Register {
         symbol: String::from("undefined"),

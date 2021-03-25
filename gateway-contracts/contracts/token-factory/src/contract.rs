@@ -1,13 +1,14 @@
-use cosmwasm_std::{log, to_binary, Api, Binary, CanonicalAddr, CosmosMsg, Env, Extern, HandleResponse, InitResponse, LogAttribute, Querier, StdError, StdResult, Storage, Uint128, WasmMsg, HumanAddr};
+use cosmwasm_std::{
+    log, to_binary, Api, Binary, CanonicalAddr, CosmosMsg, Env, Extern, HandleResponse, HumanAddr,
+    InitResponse, LogAttribute, Querier, StdError, StdResult, Storage, Uint128, WasmMsg,
+};
 
 use cw20::MinterResponse;
 
 use axelar_gateway::{
-    hook::InitHook, 
-    token_factory::{
-        TokenAddressResponse, ConfigResponse, HandleMsg, InitMsg, QueryMsg
-    }, 
-    token::InitMsg as TokenInitMsg
+    hook::InitHook,
+    token::InitMsg as TokenInitMsg,
+    token_factory::{ConfigResponse, HandleMsg, InitMsg, QueryMsg, TokenAddressResponse},
 };
 
 use crate::state::{config_read, config_store, read_token_address, store_token_address, Config};
@@ -110,6 +111,7 @@ pub fn try_deploy_token<S: Storage, A: Api, Q: Querier>(
             decimals: decimals,
             initial_balances: vec![],
             mint: Some(MinterResponse {
+                // proxy contract should own the deployed token
                 minter: env.message.sender.clone(),
                 cap: Some(cap),
             }),
@@ -124,10 +126,7 @@ pub fn try_deploy_token<S: Storage, A: Api, Q: Querier>(
 
     Ok(HandleResponse {
         messages,
-        log: vec![
-            log("action", ACTION_DEPLOY),
-            log("symbol", symbol),
-        ],
+        log: vec![log("action", ACTION_DEPLOY), log("symbol", symbol)],
         data: None,
     })
 }
