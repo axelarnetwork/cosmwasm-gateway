@@ -1,5 +1,5 @@
 use crate::{contract::*, state::*};
-use axelar_gateway::token::InitMsg as TokenInitMsg;
+use axelar_gateway::{token::InitMsg as TokenInitMsg, token_factory::TokenAddressResponse};
 use axelar_gateway::{
     hook::InitHook,
     token_factory::{ConfigResponse, HandleMsg, InitMsg, QueryMsg},
@@ -49,12 +49,12 @@ fn authorization() {
     let res = must_be_owner(&deps, &unauth_env.clone());
     match res {
         Err(StdError::Unauthorized { .. }) => {}
-        _ => panic!("Must return unauthorized error"),
+        _ => panic!("must return unauthorized error"),
     }
 
     let res = must_be_owner(&deps, &env.clone());
     match res {
-        Err(StdError::Unauthorized { .. }) => panic!("Owner should be authorized"),
+        Err(StdError::Unauthorized { .. }) => panic!("owner should be authorized"),
         _ => {}
     }
 }
@@ -94,7 +94,7 @@ fn deploy_token() {
     let res = handle(&mut deps, env.clone(), msg).unwrap();
     assert_eq!(
         res.log,
-        vec![log("action", ACTION_DEPLOY), log(ATTR_SYMBOl, &symbol)]
+        vec![log("action", ACTION_DEPLOY), log(ATTR_SYMBOL, &symbol)]
     );
 
     assert_eq!(
@@ -124,6 +124,81 @@ fn deploy_token() {
         })]
     );
 
-    let token_addr = token_address_read(&deps.storage, &symbol).unwrap();
+    let token_addr = read_token_address(&deps.storage, &symbol).unwrap();
     assert_eq!(token_addr, CanonicalAddr::default(), "deploy token intent not stored");
 }
+
+#[test]
+fn register() {
+    let mut deps = mock_dependencies(20, &[]);
+
+    let token_code_id = 1000u64;
+    let env = mock_env("master_address", &[]);
+    let init_msg = InitMsg {
+        owner: env.message.sender.clone(),
+        token_code_id: token_code_id.clone(),
+        init_hook: None,
+    };
+
+    let _res = init(&mut deps, env, init_msg).unwrap();
+
+    let symbol = String::from("satoshi");
+    let name = String::from("Satoshi");
+    let cap = Uint128::from(10000u128);
+  
+    // attempt to register symbol that was not deployed
+    let msg = HandleMsg::Register {
+        symbol: symbol.clone(),
+    };
+    let env = mock_env("token001", &[]);
+    let res = handle(&mut deps, env.clone(), msg);
+    match res {
+        Err(StdError::GenericErr{..}) => {}
+        _ => panic!("must return not registered error"),
+    }
+
+    // 1. deploy token contract
+    let msg = HandleMsg::DeployToken {
+        name: name.clone(),
+        symbol: symbol.clone(),
+        decimals: 8,
+        cap: cap.clone(),
+    };
+
+    // check symbol was stored
+    let env = mock_env("master_address", &[]);
+    let _res = handle(&mut deps, env, msg).unwrap();
+
+    // do we need to test this? Query should never be called at this stage
+    let query_res = query(&deps, QueryMsg::GetTokenAddress { symbol: symbol.clone() }).unwrap();
+    let token_addr: TokenAddressResponse = from_binary(&query_res).unwrap();
+    assert_eq!(HumanAddr::default(), token_addr.token_address);
+
+    // 2. register token contract
+    let msg = HandleMsg::Register {
+        symbol: symbol.clone(),
+    };
+    let env = mock_env("token001", &[]);
+    let _res = handle(&mut deps, env, msg.clone()).unwrap();
+
+    let query_res = query(&deps, QueryMsg::GetTokenAddress { symbol: symbol.clone() }).unwrap();
+    let token_addr: TokenAddressResponse = from_binary(&query_res).unwrap();
+    assert_eq!(HumanAddr::from("token001"), token_addr.token_address);
+
+    // attempt to register already registered token
+    let env = mock_env("token002", &[]);
+    match handle(&mut deps, env.clone(), msg.clone()) {
+        Err(StdError::GenericErr{..}) => {}
+        _ => panic!("must return already registered error"),
+    }
+    
+    // attempt to regsiter token that was not instantiated
+    let msg = HandleMsg::Register {
+        symbol: String::from("undefined"),
+    };
+    match handle(&mut deps, env.clone(), msg) {
+        Err(StdError::GenericErr{..}) => {}
+        _ => panic!("must return no registered token error"), 
+    }
+}
+

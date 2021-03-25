@@ -1,21 +1,27 @@
-use cosmwasm_std::{
-    log, to_binary, Api, Binary, CanonicalAddr, CosmosMsg, Env, Extern, HandleResponse,
-    InitResponse, LogAttribute, Querier, StdError, StdResult, Storage, Uint128, WasmMsg,
-};
+use cosmwasm_std::{log, to_binary, Api, Binary, CanonicalAddr, CosmosMsg, Env, Extern, HandleResponse, InitResponse, LogAttribute, Querier, StdError, StdResult, Storage, Uint128, WasmMsg, HumanAddr};
 
 use cw20::MinterResponse;
 
-use axelar_gateway::hook::InitHook;
-use axelar_gateway::token::InitMsg as TokenInitMsg;
-use axelar_gateway::token_factory::{ConfigResponse, HandleMsg, InitMsg, QueryMsg};
+use axelar_gateway::{
+    hook::InitHook, 
+    token_factory::{
+        TokenAddressResponse, ConfigResponse, HandleMsg, InitMsg, QueryMsg
+    }, 
+    token::InitMsg as TokenInitMsg
+};
 
-use crate::state::{config_read, config_store, token_address_read, token_address_store, Config};
+use crate::state::{config_read, config_store, read_token_address, store_token_address, Config};
+use std::fs::canonicalize;
 
 pub static ATTR_NEW_OWNER: &str = "new_owner";
 pub static ATTR_PREV_OWNER: &str = "previous_owner";
 pub static ACTION_OWNERSHIP: &str = "ownership";
+
 pub static ACTION_DEPLOY: &str = "deploy_token";
-pub static ATTR_SYMBOl: &str = "symbol";
+pub static ATTR_SYMBOL: &str = "symbol";
+
+pub static ACTION_REGISTER: &str = "deploy_register";
+pub static ATTR_TOKEN_ADDR: &str = "token_addr";
 
 pub fn init<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
@@ -59,7 +65,7 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             decimals,
             cap,
         } => try_deploy_token(deps, env, name, symbol, decimals, cap),
-        HandleMsg::Register { symbol } => Ok(HandleResponse::default()),
+        HandleMsg::Register { symbol } => try_register_token(deps, env, symbol),
         HandleMsg::Withdraw { symbol, address } => Ok(HandleResponse::default()),
     }
 }
@@ -86,12 +92,13 @@ pub fn try_deploy_token<S: Storage, A: Api, Q: Querier>(
     must_be_owner(&deps, &env)?;
     let config = config_read(&deps.storage)?;
 
-    if token_address_read(&deps.storage, &symbol).is_ok() {
+    if read_token_address(&deps.storage, &symbol).is_ok() {
         return Err(StdError::generic_err("token already exists"));
     }
 
     // mark intent to register token address post-initialization
-    token_address_store(&mut deps.storage, &symbol, &CanonicalAddr::default())?;
+    let temp_addr = CanonicalAddr::default();
+    store_token_address(&mut deps.storage, &symbol, &temp_addr)?;
 
     let messages: Vec<CosmosMsg> = vec![CosmosMsg::Wasm(WasmMsg::Instantiate {
         code_id: config.token_code_id,
@@ -125,12 +132,38 @@ pub fn try_deploy_token<S: Storage, A: Api, Q: Querier>(
     })
 }
 
+pub fn try_register_token<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    symbol: String,
+) -> StdResult<HandleResponse> {
+    let token_address = read_token_address(&deps.storage, &symbol)?; // fails if symbol not deployed
+    if token_address != CanonicalAddr::default() {
+        return Err(StdError::generic_err("token already registered"));
+    }
+
+    let token_contract = deps.api.canonical_address(&env.message.sender)?;
+
+    // mark intent to register token address post-initialization
+    store_token_address(&mut deps.storage, &symbol, &token_contract)?;
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![
+            log("action", ACTION_REGISTER),
+            log(ATTR_TOKEN_ADDR, token_contract),
+        ],
+        data: None,
+    })
+}
+
 pub fn query<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     msg: QueryMsg,
 ) -> StdResult<Binary> {
     match msg {
         QueryMsg::GetConfig {} => to_binary(&query_config(deps)?),
+        QueryMsg::GetTokenAddress { symbol } => to_binary(&query_token_address(deps, symbol)?),
     }
 }
 
@@ -141,5 +174,21 @@ fn query_config<S: Storage, A: Api, Q: Querier>(
     Ok(ConfigResponse {
         owner: deps.api.human_address(&config.owner)?,
         token_code_id: config.token_code_id,
+    })
+}
+
+fn query_token_address<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    symbol: String,
+) -> StdResult<TokenAddressResponse> {
+    let canon_addr = read_token_address(&deps.storage, &symbol)?;
+
+    let token_address = match canon_addr.len() {
+        0 => HumanAddr::default(), // test api will panic if canon_addr = CanonAddr::default()
+        _ => deps.api.human_address(&canon_addr)?,
+    };
+
+    Ok(TokenAddressResponse {
+        token_address: token_address,
     })
 }

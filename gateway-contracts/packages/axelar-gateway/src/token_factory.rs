@@ -34,6 +34,7 @@ pub enum HandleMsg {
 pub enum QueryMsg {
     // GetCount returns the current count as a json-encoded number
     GetConfig {},
+    GetTokenAddress { symbol: String },
 }
 
 // We define a custom struct for each query response
@@ -41,4 +42,9 @@ pub enum QueryMsg {
 pub struct ConfigResponse {
     pub owner: HumanAddr,
     pub token_code_id: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct TokenAddressResponse {
+    pub token_address: HumanAddr,
 }
