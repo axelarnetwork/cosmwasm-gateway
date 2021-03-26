@@ -1,8 +1,8 @@
 use crate::{contract::*, state::*};
-use axelar_gateway::{token::InitMsg as TokenInitMsg, token_factory::TokenAddressResponse};
 use axelar_gateway::{
     hook::InitHook,
-    token_factory::{ConfigResponse, HandleMsg, InitMsg, QueryMsg},
+    token::InitMsg as TokenInitMsg,
+    token_factory::{ConfigResponse, HandleMsg, InitMsg, QueryMsg, TokenAddressResponse},
 };
 use cosmwasm_std::{
     coins, from_binary, log,

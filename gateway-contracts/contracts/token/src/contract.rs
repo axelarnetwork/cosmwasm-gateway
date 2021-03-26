@@ -17,7 +17,7 @@ use axelar_gateway::token::{InitMsg,HandleMsg,QueryMsg};
 const CONTRACT_NAME: &str = "crates.io:cw20-base";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-const MINTER_ERROR: &str = "Must provide minter data";
+pub const MINTER_ERROR: &str = "Must provide minter data";
 
 pub fn init<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
@@ -124,19 +124,20 @@ pub fn handle_withdraw<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("Invalid zero amount"));
     }
 
+    // send to minter (proxy contract will consolidate later by burning)
+    let config = token_info_read(&deps.storage).load()?;
+    let rcpt_raw = &config.mint.as_ref().unwrap().minter;
     let sender_raw = deps.api.canonical_address(&env.message.sender)?;
 
-    // lower balance
     let mut accounts = balances(&mut deps.storage);
     accounts.update(sender_raw.as_slice(), |balance: Option<Uint128>| {
         balance.unwrap_or_default() - amount
     })?;
-    // reduce total_supply
-    token_info(&mut deps.storage).update(|mut info| {
-        info.total_supply = (info.total_supply - amount)?;
-        Ok(info)
+    accounts.update(rcpt_raw.as_slice(), |balance: Option<Uint128>| {
+        Ok(balance.unwrap_or_default() + amount)
     })?;
 
+    // log recipient to be read verified by Axelar validators
     let res = HandleResponse {
         messages: vec![],
         log: vec![
@@ -159,7 +160,8 @@ pub fn handle_burn<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("Invalid zero amount"));
     }
 
-    let mut config = token_info_read(&deps.storage).load()?;
+    // only the minter may burn
+    let config = token_info_read(&deps.storage).load()?;
     if config.mint.is_none()
         || config.mint.as_ref().unwrap().minter
             != deps.api.canonical_address(&env.message.sender)?
@@ -190,52 +192,4 @@ pub fn handle_burn<S: Storage, A: Api, Q: Querier>(
         data: None,
     };
     Ok(res)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use cosmwasm_std::{Uint128, testing::{mock_dependencies, mock_env}};
-    use cosmwasm_std::{coins, from_binary, HumanAddr, StdError};
-    use cw20::MinterResponse;
-
-    #[test]
-    fn proper_initialization() {
-        let mut deps = mock_dependencies(20, &[]);
-
-        let proxy = HumanAddr::from("master_address");
-        let env = mock_env(proxy.clone(), &coins(1000, "earth"));
-
-        let cap: u128 = 1000000;
-        let cap = Uint128::from(cap);
-        let init_msg = InitMsg {
-            name: "axelar".to_string(),
-            symbol: "XLR".to_string(),
-            decimals: 8,
-            initial_balances: vec![],
-            mint: Some(MinterResponse {
-                minter: proxy.clone(),
-                cap: Some(cap),
-            }),
-            init_hook: None,
-        };
-
-        let res = init(&mut deps, env.clone(), init_msg).unwrap();
-        assert_eq!(0, res.messages.len());
-
-        // init message without minter cap
-        let init_msg = InitMsg {
-            name: "axelar".to_string(),
-            symbol: "XLR".to_string(),
-            decimals: 8,
-            initial_balances: vec![],
-            mint: None,
-            init_hook: None,
-        };
-        let res = init(&mut deps, env.clone(), init_msg);
-        match res {
-            Err(StdError::GenericErr {msg, backtrace}) => assert_eq!(MINTER_ERROR, msg),
-            _ => panic!("Must return minter error"),
-        }
-    }
 }
