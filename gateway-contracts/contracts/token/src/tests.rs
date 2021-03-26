@@ -157,3 +157,64 @@ fn burn() {
         _ => panic!("must return unauthorized error"),
     }
 }
+
+#[test]
+fn withdraw() {
+    let mut deps = mock_dependencies(20, &[]);
+    let proxy = HumanAddr::from("master_address");
+    let payer = HumanAddr::from("payer");
+
+    let payer_env = mock_env(payer.clone(), &coins(1000, "earth"));
+
+    let cap: u128 = 1000000;
+    let cap = Uint128::from(cap);
+    let init_msg = InitMsg {
+        name: "axelar".to_string(),
+        symbol: "XLR".to_string(),
+        decimals: 8,
+        initial_balances: vec![],
+        mint: Some(MinterResponse {
+            minter: proxy.clone(),
+            cap: Some(cap),
+        }),
+        init_hook: None,
+    };
+
+    let _res = init(&mut deps, payer_env, init_msg).unwrap();
+
+    let user = HumanAddr::from("user001");
+    let amount = Uint128::from(100u64); 
+
+    // mint some tokens to withdraw
+    let proxy_env = mock_env(proxy.clone(), &[]);
+    let msg = HandleMsg::Mint {
+        recipient: user.clone(),
+        amount: amount.clone(),
+    };
+    let _res = handle(&mut deps, proxy_env.clone(), msg).unwrap();
+
+    // attempt withdraw
+    let cross_chain_addr = HumanAddr::from("tb1qw99lg2um87u0gxx4c8k9f9h8ka0tcjcmjk92np");
+    let msg = HandleMsg::Withdraw {
+        recipient: cross_chain_addr.clone(),
+        amount: amount.clone(),
+    };
+
+    let user_env = mock_env(user.clone(), &[]);
+    let res = handle(&mut deps, user_env, msg.clone()).unwrap();
+    assert_eq!(
+        res.log,
+        vec![
+            log("action", "withdraw"),
+            log("from", user.clone()),
+            log("to", cross_chain_addr.clone()),
+            log("amount", amount),
+        ],
+    );
+    assert_eq!(0, res.messages.len());
+
+    // check balance was updated
+    let query_res = query(&deps, QueryMsg::Balance { address: user }).unwrap();
+    let balance_res: BalanceResponse = from_binary(&query_res).unwrap(); 
+    assert_eq!(Uint128::zero(), balance_res.balance);
+}
