@@ -32,7 +32,8 @@ cranelift = ["cosmwasm-vm/cranelift"]
 backtraces = ["cosmwasm-std/backtraces", "cosmwasm-vm/backtraces"]
 
 [dependencies]
-k256 = { version = "0.7.2", features = ["ecdsa"] }
+k256 = { version = "0.7.2", features = ["ecdsa", "sha256"] }
+rand_core = { version = "0.5", features = ["getrandom"] }
 cosmwasm-crypto = "0.14.0-beta1"
 cosmwasm-std = { version = "0.10.1" }
 cosmwasm-storage = { version = "0.10.1" }
@@ -44,8 +45,8 @@ sha2 = "0.9"
 sha3 = "0.9"
 
 [dev-dependencies]
-k256 = { version = "0.7.2", features = ["ecdsa"] }
-rand_core = "0.6.2"
+k256 = { version = "0.7.2", features = ["ecdsa", "sha256"] }
+rand_core = { version = "0.5", features = ["getrandom"] }
 cosmwasm-vm = "0.10"
 cosmwasm-schema = { version = "0.10.1" }
 hex-literal = "0.3.1"

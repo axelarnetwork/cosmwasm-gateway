@@ -73,13 +73,18 @@ mod tests {
     use cosmwasm_std::{
         from_slice, Binary, StdError
     };
+    use sha2::{Digest, Sha256};
     use cosmwasm_crypto::{CryptoError};
     use hex_literal::hex;
     use k256::{
-        ecdsa::{SigningKey, Signature, signature::Signer},
+        CompressedPoint,
+        PublicKey,
+        EncodedPoint,
+        ecdsa::{VerifyingKey, signature::Verifier,SigningKey, Signature, signature::Signer},
         SecretKey,
+        elliptic_curve::sec1::ToEncodedPoint,
     };
-    use rand_core::SeedableRng;
+    use rand_core::OsRng;
 
     const CREATOR: &str = "creator";
 
@@ -87,17 +92,11 @@ mod tests {
     const SECP256K1_SIGNATURE_HEX: &str = "207082eb2c3dfa0b454e0906051270ba4074ac93760ba9e7110cd9471475111151eb0dbbc9920e72146fb564f99d039802bf6ef2561446eb126ef364d21ee9c4";
     const SECP256K1_PUBLIC_KEY_HEX: &str = "04051c1ee2190ecfb174bfe4f90763f2b4ff7517b70a2aec1876ebcfd644c4633fb03f3cfbd94b1f376e34592d9d41ccaf640bb751b00a1fadeb0c01157769eb73";
 
-    /* #[test]
-    fn create_secp256k1_sig () {
+    #[test]
+    fn secp256k1_verify () {
         // Signing
-        let msg = to_binary(&InitMsg{});
-
-        let signing_key = SigningKey::random(&mut SeedableRng::seed_from_u64(100u64)); // Serialize with `::to_bytes()`
+        let signing_key = SigningKey::random(&mut OsRng); // Serialize with `::to_bytes()`
         let message = b"ECDSA proves knowledge of a secret number in the context of a single message";
-
-        // Note: the signature type must be annotated or otherwise inferrable as
-        // `Signer` has many impls of the `Signer` trait (for both regular and
-        // recoverable signature types).
         let signature: Signature = signing_key.sign(message);
 
         // Verification
@@ -105,8 +104,31 @@ mod tests {
 
         let verify_key = VerifyingKey::from(&signing_key); // Serialize with `::to_encoded_point()`
         assert!(verify_key.verify(message, &signature).is_ok());
+    }
 
-    } */
+    fn verify_message_batch () {
+        // Signing
+        let signing_key = SigningKey::random(&mut OsRng); // Serialize with `::to_bytes()`
+        let pub_key = VerifyingKey::from(&signing_key); // Serialize with `::to_encoded_point()`
+
+        let msg = InitMsg{};
+        let messages = vec![msg.clone(),msg.clone(),msg.clone()];
+        let digest = Sha256::digest(to_binary(&messages).unwrap().as_slice());
+
+        let signature: Signature = signing_key.sign(&digest);
+
+        let verify_msg = QueryMsg::VerifyCosmosSignature {
+            message: Binary::from(digest.as_slice()),
+            signature: Binary::from(signature.as_ref()),
+            public_key: Binary::from(pub_key.to_encoded_point(false).as_bytes()),
+        };
+
+        let deps = setup();
+        let raw = query(&deps, verify_msg).unwrap();
+        let res: VerifyResponse = from_binary(&raw).unwrap();
+
+        assert_eq!(res, VerifyResponse { verifies: true });
+    }
 
     fn setup() -> Extern<MockStorage, MockApi, MockQuerier> {
         let mut deps = mock_dependencies(20, &[]);
@@ -178,13 +200,7 @@ mod tests {
         };
 
         let res = query(&deps, verify_msg);
-        /* assert!(res.is_err());
-        assert_eq!(
-            res.unwrap_err(),
-            StdError::VerificationErr {
-                source: VerificationError::InvalidPubkeyFormat
-            }
-        ) */
+        assert!(res.is_err());
     }
 
     #[test]
