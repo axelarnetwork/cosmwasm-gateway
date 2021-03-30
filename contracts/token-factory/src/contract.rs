@@ -11,7 +11,7 @@ use axelar_gateway::{
     token_factory::{ConfigResponse, HandleMsg, InitMsg, QueryMsg, TokenAddressResponse},
 };
 
-use crate::state::{config_read, config_store, read_token_address, store_token_address, Config};
+use crate::state::{read_config, store_config, read_token_address, store_token_address, Config};
 use std::fs::canonicalize;
 
 pub static ATTR_NEW_OWNER: &str = "new_owner";
@@ -33,7 +33,7 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         owner: deps.api.canonical_address(&env.message.sender)?,
         token_code_id: msg.token_code_id,
     };
-    config_store(&mut deps.storage, &config)?;
+    store_config(&mut deps.storage, &config)?;
 
     let mut messages: Vec<CosmosMsg> = vec![];
     if let Some(hook) = msg.init_hook {
@@ -75,7 +75,7 @@ pub fn must_be_owner<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
     env: &Env,
 ) -> StdResult<()> {
-    if deps.api.canonical_address(&env.message.sender)? != config_read(&deps.storage)?.owner {
+    if deps.api.canonical_address(&env.message.sender)? != read_config(&deps.storage)?.owner {
         return Err(StdError::unauthorized());
     }
 
@@ -91,7 +91,7 @@ pub fn try_deploy_token<S: Storage, A: Api, Q: Querier>(
     cap: Uint128,
 ) -> StdResult<HandleResponse> {
     must_be_owner(&deps, &env)?;
-    let config = config_read(&deps.storage)?;
+    let config = read_config(&deps.storage)?;
 
     if read_token_address(&deps.storage, &symbol).is_ok() {
         return Err(StdError::generic_err("token already exists"));
@@ -141,6 +141,8 @@ pub fn try_register_token<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("token already registered"));
     }
 
+    deps.querier.query
+
     let token_contract = deps.api.canonical_address(&env.message.sender)?;
 
     // mark intent to register token address post-initialization
@@ -169,7 +171,7 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
 fn query_config<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
 ) -> StdResult<ConfigResponse> {
-    let config = config_read(&deps.storage)?;
+    let config = read_config(&deps.storage)?;
     Ok(ConfigResponse {
         owner: deps.api.human_address(&config.owner)?,
         token_code_id: config.token_code_id,

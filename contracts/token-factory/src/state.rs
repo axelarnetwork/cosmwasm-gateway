@@ -15,11 +15,11 @@ pub struct Config {
     pub token_code_id: u64,
 }
 
-pub fn config_store<S: Storage>(storage: &mut S, data: &Config) -> StdResult<()> {
+pub fn store_config<S: Storage>(storage: &mut S, data: &Config) -> StdResult<()> {
     singleton(storage, KEY_CONFIG).save(data)
 }
 
-pub fn config_read<S: Storage>(storage: &S) -> StdResult<Config> {
+pub fn read_config<S: Storage>(storage: &S) -> StdResult<Config> {
     singleton_read(storage, KEY_CONFIG).load()
 }
 

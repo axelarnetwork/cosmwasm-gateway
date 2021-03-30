@@ -1,9 +1,14 @@
 [package]
-name = "crypto-verify"
-version = "0.0.0"
-authors = ["Mauro Lacy <maurolacy@users.noreply.github.com>"]
+name = "gateway"
+version = "0.1.0"
+authors = ["jack <jackson.virgo1@gmail.com>"]
 edition = "2018"
-publish = false
+
+exclude = [
+  # Those files are rust-optimizer artifacts. You might want to commit them for convenience but they should not be part of the source code publication.
+  "contract.wasm",
+  "hash.txt",
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -22,29 +27,22 @@ incremental = false
 overflow-checks = true
 
 [features]
-# Change this to [] if you don't need Windows support and want faster integration tests.
-#default = ["cranelift"]
-default = []
-# Use cranelift backend instead of singlepass. This is required for development on Windows.
-cranelift = ["cosmwasm-vm/cranelift"]
-# for quicker tests, cargo test --lib
 # for more explicit tests, cargo test --features=backtraces
-backtraces = ["cosmwasm-std/backtraces", "cosmwasm-vm/backtraces"]
+backtraces = ["cosmwasm-std/backtraces"]
 
 [dependencies]
+sha3 = "0.9"
+k256 = { version = "0.7.2", features = ["ecdsa", "sha256"] }
+axelar-gateway = { path = "../../packages/axelar-gateway", default-features = false, version = "0.1.0"}
 cosmwasm-crypto = "0.14.0-beta1"
 cosmwasm-std = { version = "0.10.1" }
 cosmwasm-storage = { version = "0.10.1" }
-hex = "0.4"
-rlp = "0.5"
+cw1-whitelist = "0.2.3"
+cw1 = "0.5.0"
 schemars = "0.7"
 serde = { version = "1.0.103", default-features = false, features = ["derive"] }
-sha2 = "0.9"
-sha3 = "0.9"
+snafu = { version = "0.6.3" }
 
 [dev-dependencies]
-k256 = { version = "0.7.2", features = ["ecdsa", "sha256"] }
 rand_core = { version = "0.5", features = ["getrandom"] }
-cosmwasm-vm = "0.10"
 cosmwasm-schema = { version = "0.10.1" }
-hex-literal = "0.3.1"

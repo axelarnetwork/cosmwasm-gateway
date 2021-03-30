@@ -19,6 +19,17 @@ pub enum QueryMsg {
         /// Serialized compressed (33 bytes) or uncompressed (65 bytes) public key.
         public_key: Binary,
     },
+
+    /// Cosmos Address Recovery
+    RecoverCosmosAddress {
+        /// Message to verify
+        message: String,
+        /// Serialized signature. Fixed length format (64 bytes `r` and `s` plus the one byte `v`).
+        signature: Binary,
+        /// Signer address.
+        /// This is matched case insensitive, so you can provide checksummed and non-checksummed addresses. Checksums are not validated.
+        signer_address: String,
+    },
     /// Returns a list of supported verification schemes.
     /// No pagination - this is a short list.
     ListVerificationSchemes {},

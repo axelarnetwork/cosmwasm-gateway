@@ -1,9 +1,13 @@
-use cosmwasm_std::{Api, Binary, Extern, Env, InitResponse, Querier, StdError, StdResult, Storage, Uint128, to_binary};
+use cosmwasm_std::{
+    Querier
+    to_binary, Api, Binary, CanonicalAddr, Env, Extern, InitResponse, Querier, StdError, StdResult,
+    Storage, Uint128,
+};
 use sha2::{Digest, Sha256};
 use sha3::Keccak256;
 use std::ops::Deref;
 
-use cosmwasm_crypto::{secp256k1_recover_pubkey,secp256k1_verify};
+use cosmwasm_crypto::{secp256k1_recover_pubkey, secp256k1_verify};
 
 use crate::msg::{
     list_verifications, InitMsg, ListVerificationsResponse, QueryMsg, VerifyResponse,
@@ -34,6 +38,7 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
             signature.as_slice(),
             public_key.as_slice(),
         )?),
+        QueryMsg::RecoverCosmosAddress { .. } => Ok(Binary::default()),
         QueryMsg::ListVerificationSchemes {} => to_binary(&query_list_verifications(deps)?),
     }
 }
@@ -47,6 +52,7 @@ pub fn query_verify_cosmos<S: Storage, A: Api, Q: Querier>(
     // Hashing
     let hash = Sha256::digest(message);
 
+
     // Verification
     let result = secp256k1_verify(hash.as_ref(), signature, public_key);
     match result {
@@ -55,8 +61,8 @@ pub fn query_verify_cosmos<S: Storage, A: Api, Q: Querier>(
     }
 }
 
-pub fn query_list_verifications<S: Storage, A: Api, Q: Querier> (
-deps: &Extern<S, A, Q>
+pub fn query_list_verifications<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
 ) -> StdResult<ListVerificationsResponse> {
     let verification_schemes: Vec<_> = list_verifications(deps);
     Ok(ListVerificationsResponse {
@@ -67,24 +73,21 @@ deps: &Extern<S, A, Q>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::{HumanAddr, from_binary, testing::{
-        mock_dependencies, mock_env, MockApi, MockQuerier, MockStorage,
-    }};
+    use cosmwasm_crypto::CryptoError;
     use cosmwasm_std::{
-        from_slice, Binary, StdError
+        from_binary,
+        testing::{mock_dependencies, mock_env, MockApi, MockQuerier, MockStorage},
+        HumanAddr,
     };
-    use sha2::{Digest, Sha256};
-    use cosmwasm_crypto::{CryptoError};
+    use cosmwasm_std::{from_slice, Binary, StdError};
     use hex_literal::hex;
     use k256::{
-        CompressedPoint,
-        PublicKey,
-        EncodedPoint,
-        ecdsa::{VerifyingKey, signature::Verifier,SigningKey, Signature, signature::Signer},
-        SecretKey,
+        ecdsa::{signature::Signer, signature::Verifier, Signature, SigningKey, VerifyingKey},
         elliptic_curve::sec1::ToEncodedPoint,
+        CompressedPoint, EncodedPoint, PublicKey, SecretKey,
     };
     use rand_core::OsRng;
+    use sha2::{Digest, Sha256};
 
     const CREATOR: &str = "creator";
 
@@ -93,26 +96,13 @@ mod tests {
     const SECP256K1_PUBLIC_KEY_HEX: &str = "04051c1ee2190ecfb174bfe4f90763f2b4ff7517b70a2aec1876ebcfd644c4633fb03f3cfbd94b1f376e34592d9d41ccaf640bb751b00a1fadeb0c01157769eb73";
 
     #[test]
-    fn secp256k1_verify () {
-        // Signing
-        let signing_key = SigningKey::random(&mut OsRng); // Serialize with `::to_bytes()`
-        let message = b"ECDSA proves knowledge of a secret number in the context of a single message";
-        let signature: Signature = signing_key.sign(message);
-
-        // Verification
-        use k256::{EncodedPoint, ecdsa::{VerifyingKey, signature::Verifier}};
-
-        let verify_key = VerifyingKey::from(&signing_key); // Serialize with `::to_encoded_point()`
-        assert!(verify_key.verify(message, &signature).is_ok());
-    }
-
-    fn verify_message_batch () {
+    fn comsos_verify_message_batch() {
         // Signing
         let signing_key = SigningKey::random(&mut OsRng); // Serialize with `::to_bytes()`
         let pub_key = VerifyingKey::from(&signing_key); // Serialize with `::to_encoded_point()`
 
-        let msg = InitMsg{};
-        let messages = vec![msg.clone(),msg.clone(),msg.clone()];
+        let msg = InitMsg {};
+        let messages = vec![msg.clone(), msg.clone(), msg.clone()];
         let digest = Sha256::digest(to_binary(&messages).unwrap().as_slice());
 
         let signature: Signature = signing_key.sign(&digest);
@@ -215,9 +205,7 @@ mod tests {
         assert_eq!(
             res,
             ListVerificationsResponse {
-                verification_schemes: vec![
-                    "secp256k1".into(),
-                ]
+                verification_schemes: vec!["secp256k1".into(),]
             }
         );
     }
