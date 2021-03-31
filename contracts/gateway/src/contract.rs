@@ -1,4 +1,4 @@
-use core::fmt;
+use std::fmt;
 
 use cosmwasm_std::{
     log, to_binary, to_vec, Api, Binary, CanonicalAddr, CosmosMsg, Empty, Env, Extern,
@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::state::{read_config, store_config, Config};
 
-use axelar_gateway::crypto;
+use axelar_gateway::crypto::{InitMsg as CryptoInitMsg, VerifyResponse as CryptoVerifyResponse, QueryMsg as CryptoQueryMsg};
 use axelar_gateway::gateway::{CanSendResponse, ConfigResponse, HandleMsg, InitMsg, QueryMsg};
 use sha3::{Digest, Keccak256};
 
@@ -144,24 +144,23 @@ where
     let cfg = read_config(&deps.storage)?;
 
     // serialize cosmos messages into base64 encoded json
-    let res: Result<Vec<_>, _> = msgs.into_iter().map(|msg| to_vec(&msg)).collect();
-    let serials = match res {
-        Ok(slice) => slice,
-        Err(err) => return Err(err),
-    };
-    let mut bytes: Vec<u8> = serials.concat();
+    let mut bytes = msgs
+        .into_iter()
+        .map(|msg| to_vec(&msg))
+        .collect::<Result<Vec<_>, _>>()?
+        .concat();
 
     // append the nonce and calculate the message digest
     bytes.extend_from_slice(&cfg.nonce.to_be_bytes());
     let digest = Keccak256::digest(bytes.as_slice());
 
-    let verify_msg = crypto::QueryMsg::VerifyCosmosSignature {
+    let verify_msg = CryptoQueryMsg::VerifyCosmosSignature {
         message: Binary::from(digest.as_slice()),
-        signature: Binary::from(sig.clone()),
+        signature: Binary::from(sig),
         public_key: Binary::from(cfg.public_key),
     };
 
-    let res: crypto::VerifyResponse =
+    let res: CryptoVerifyResponse =
         deps.querier
             .query(&cosmwasm_std::QueryRequest::Wasm(WasmQuery::Smart {
                 contract_addr: deps.api.human_address(&cfg.crypto_contract_addr)?,
@@ -169,6 +168,21 @@ where
             }))?;
 
     Ok(res.verifies)
+}
+
+pub fn digest_message_batch<T>(nonce: u64, msgs: &Vec<CosmosMsg<T>>) -> StdResult<Vec<u8>>
+    where T: Clone + fmt::Debug + PartialEq + JsonSchema + Serialize,
+{
+    // serialize cosmos messages into base64 encoded json
+    let mut bytes = msgs
+        .into_iter()
+        .map(|msg| to_vec(&msg))
+        .collect::<Result<Vec<_>, _>>()?
+        .concat();
+
+    // append the nonce and calculate the message digest
+    bytes.extend_from_slice(&nonce.to_be_bytes());
+    Ok(Keccak256::digest(bytes.as_slice()).to_vec())
 }
 
 pub fn handle_freeze<S: Storage, A: Api, Q: Querier>(
@@ -226,33 +240,37 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::{coins, from_binary, StdError};
+    use cosmwasm_std::{CosmosMsg, StdError, WasmMsg, coins, from_binary, testing::{MockApi, MockQuerier, MockStorage}};
     use cosmwasm_std::{
         testing::{mock_dependencies, mock_env},
         HumanAddr,
     };
+    use crypto_verify::contract as crypto_contract;
     use cw1_whitelist::msg::AdminListResponse;
     use k256::{
+        EncodedPoint,
         ecdsa::{signature::Signer, signature::Verifier, Signature, SigningKey, VerifyingKey},
         elliptic_curve::sec1::ToEncodedPoint,
     };
 
+    use axelar_gateway::crypto::{InitMsg as CryptoInitMsg};
     use axelar_gateway::gateway::{CanSendResponse, ConfigResponse, HandleMsg, InitMsg, QueryMsg};
     use rand_core::OsRng;
     use sha3::{Digest, Keccak256};
 
     const USE_POINT_COMPRESSION: bool = true;
+    const CANONICAL_LENGTH: usize = 20;
 
-    #[test]
-    fn initialization() {
-        let mut deps = mock_dependencies(20, &[]);
 
-        let signing_key = SigningKey::random(&mut OsRng); // Serialize with `::to_bytes()`
-        let pub_key = VerifyingKey::from(&signing_key).to_encoded_point(USE_POINT_COMPRESSION);
+    fn setup_gateway(mut crypto_addr: HumanAddr) -> (Extern<MockStorage, MockApi, MockQuerier>, Env, HumanAddr, EncodedPoint, SigningKey) {
+        let mut deps = mock_dependencies(CANONICAL_LENGTH, &[]);
 
+        let priv_key = SigningKey::random(&mut OsRng); // Serialize with `::to_bytes()`
+        let pub_key = VerifyingKey::from(&priv_key).to_encoded_point(USE_POINT_COMPRESSION);
         let axelar = HumanAddr::from("axelar");
-        let anyone = HumanAddr::from("anyone");
-        let crypto_addr = HumanAddr::from("crypto_contract");
+        if crypto_addr.len() == 0 {
+            crypto_addr = HumanAddr::from("crypto_contract");
+        }
 
         // instantiate the contract
         let msg = InitMsg {
@@ -262,7 +280,7 @@ mod tests {
         };
 
         let env = mock_env(axelar.clone(), &[]);
-        let res = init(&mut deps, env, msg).unwrap();
+        let res = init(&mut deps, env.clone(), msg).unwrap();
 
         // ensure expected config
         let expected = ConfigResponse {
@@ -275,5 +293,48 @@ mod tests {
         assert_eq!(query_config(&deps).unwrap(), expected);
 
         assert_eq!(0, res.messages.len());
+        (deps, env, axelar, pub_key, priv_key)
+    }
+
+    fn setup_crypto() -> Extern<MockStorage, MockApi, MockQuerier> {
+        let mut deps = mock_dependencies(CANONICAL_LENGTH, &[]);
+        let res = crypto_contract::init(&mut deps, mock_env(HumanAddr::from("addr01"), &[]), CryptoInitMsg {}).unwrap();
+        assert_eq!(0, res.messages.len());
+        deps
+    }
+
+    #[test]
+    fn initialization() {
+        setup_gateway(HumanAddr::default());
+    }
+
+    #[test]
+    fn execute_signed() {
+        let crypto_deps = setup_crypto();
+        // todo: how to simulate contract address in env?
+        let (mut deps, gateway_env, owner, pub_key, priv_key) = setup_gateway(HumanAddr::default());
+        println!("gateway_env {}", gateway_env.contract.address);
+
+        let nonce = 0u64;
+
+        let exec_msg = CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr: gateway_env.contract.address,
+            msg: to_binary(&HandleMsg::<Empty>::Freeze{}).unwrap(),
+            send: vec![],
+        });
+
+        let messages = vec![exec_msg.clone(),exec_msg.clone(),exec_msg.clone()];
+
+        let digest = digest_message_batch(nonce, &messages).unwrap();
+        let sig: Signature = priv_key.sign(digest.as_slice());
+
+        let msg = HandleMsg::ExecuteSigned {
+            msgs: messages,
+            sig: Vec::<u8>::from(sig.as_ref()),
+        };
+
+        let env = mock_env(HumanAddr::from("anyone"), &[]);
+        let rest = handle(&mut deps, env, msg).unwrap();
+
     }
 }

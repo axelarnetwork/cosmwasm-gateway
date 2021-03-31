@@ -141,8 +141,6 @@ pub fn try_register_token<S: Storage, A: Api, Q: Querier>(
         return Err(StdError::generic_err("token already registered"));
     }
 
-    deps.querier.query
-
     let token_contract = deps.api.canonical_address(&env.message.sender)?;
 
     // mark intent to register token address post-initialization

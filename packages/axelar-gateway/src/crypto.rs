@@ -44,7 +44,3 @@ pub struct VerifyResponse {
 pub struct ListVerificationsResponse {
     pub verification_schemes: Vec<String>,
 }
-
-pub(crate) fn list_verifications<S: Storage, A: Api, Q: Querier>(_deps: &Extern<S, A, Q>) -> Vec<String> {
-    vec!["secp256k1".into()]
-}

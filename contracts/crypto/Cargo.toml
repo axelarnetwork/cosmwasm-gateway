@@ -1,6 +1,6 @@
 [package]
 name = "crypto-verify"
-version = "0.0.0"
+version = "0.1.0"
 authors = ["Mauro Lacy <maurolacy@users.noreply.github.com>"]
 edition = "2018"
 publish = false
@@ -32,6 +32,7 @@ cranelift = ["cosmwasm-vm/cranelift"]
 backtraces = ["cosmwasm-std/backtraces", "cosmwasm-vm/backtraces"]
 
 [dependencies]
+axelar-gateway = { path = "../../packages/axelar-gateway", default-features = false, version = "0.1.0"}
 cosmwasm-crypto = "0.14.0-beta1"
 cosmwasm-std = { version = "0.10.1" }
 cosmwasm-storage = { version = "0.10.1" }

@@ -1,5 +1,4 @@
 use cosmwasm_std::{
-    Querier
     to_binary, Api, Binary, CanonicalAddr, Env, Extern, InitResponse, Querier, StdError, StdResult,
     Storage, Uint128,
 };
@@ -9,8 +8,8 @@ use std::ops::Deref;
 
 use cosmwasm_crypto::{secp256k1_recover_pubkey, secp256k1_verify};
 
-use crate::msg::{
-    list_verifications, InitMsg, ListVerificationsResponse, QueryMsg, VerifyResponse,
+use axelar_gateway::crypto::{
+    InitMsg, ListVerificationsResponse, QueryMsg, VerifyResponse,
 };
 
 pub const VERSION: &str = "crypto-verify-v2";
@@ -52,7 +51,6 @@ pub fn query_verify_cosmos<S: Storage, A: Api, Q: Querier>(
     // Hashing
     let hash = Sha256::digest(message);
 
-
     // Verification
     let result = secp256k1_verify(hash.as_ref(), signature, public_key);
     match result {
@@ -68,6 +66,10 @@ pub fn query_list_verifications<S: Storage, A: Api, Q: Querier>(
     Ok(ListVerificationsResponse {
         verification_schemes,
     })
+}
+
+pub(crate) fn list_verifications<S: Storage, A: Api, Q: Querier>(_deps: &Extern<S, A, Q>) -> Vec<String> {
+    vec!["secp256k1".into()]
 }
 
 #[cfg(test)]
