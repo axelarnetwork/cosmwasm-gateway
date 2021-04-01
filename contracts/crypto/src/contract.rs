@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    to_binary, Api, Binary, CanonicalAddr, Env, Extern, InitResponse, Querier, StdError, StdResult,
-    Storage, Uint128,
+    to_binary, Api, Binary, CanonicalAddr, Env, Extern, HandleResponse, InitResponse, Querier,
+    StdError, StdResult, Storage, Uint128,
 };
 use sha2::{Digest, Sha256};
 use sha3::Keccak256;
@@ -8,8 +8,9 @@ use std::ops::Deref;
 
 use cosmwasm_crypto::{secp256k1_recover_pubkey, secp256k1_verify};
 
-use axelar_gateway::crypto::{
-    InitMsg, ListVerificationsResponse, QueryMsg, VerifyResponse,
+use axelar_gateway::{
+    crypto::{InitMsg, ListVerificationsResponse, QueryMsg, VerifyResponse},
+    gateway::HandleMsg,
 };
 
 pub const VERSION: &str = "crypto-verify-v2";
@@ -20,6 +21,14 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     _msg: InitMsg,
 ) -> StdResult<InitResponse> {
     Ok(InitResponse::default())
+}
+
+pub fn handle<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    msg: HandleMsg,
+) -> StdResult<HandleResponse> {
+    Err(StdError::not_found("no handlers exist"))
 }
 
 pub fn query<S: Storage, A: Api, Q: Querier>(
@@ -68,7 +77,9 @@ pub fn query_list_verifications<S: Storage, A: Api, Q: Querier>(
     })
 }
 
-pub(crate) fn list_verifications<S: Storage, A: Api, Q: Querier>(_deps: &Extern<S, A, Q>) -> Vec<String> {
+pub(crate) fn list_verifications<S: Storage, A: Api, Q: Querier>(
+    _deps: &Extern<S, A, Q>,
+) -> Vec<String> {
     vec!["secp256k1".into()]
 }
 
@@ -118,7 +129,6 @@ mod tests {
         let deps = setup();
         let raw = query(&deps, verify_msg).unwrap();
         let res: VerifyResponse = from_binary(&raw).unwrap();
-
         assert_eq!(res, VerifyResponse { verifies: true });
     }
 

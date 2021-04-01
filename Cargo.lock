@@ -39,9 +39,8 @@ checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 name = "axelar-gateway"
 version = "0.1.0"
 dependencies = [
- "cosmwasm-std 0.10.1",
+ "cosmwasm-std",
  "cosmwasm-storage",
- "cw1-whitelist",
  "cw2",
  "cw20",
  "schemars",
@@ -54,7 +53,7 @@ version = "0.1.0"
 dependencies = [
  "axelar-gateway",
  "cosmwasm-schema",
- "cosmwasm-std 0.10.1",
+ "cosmwasm-std",
  "cosmwasm-storage",
  "cw2",
  "cw20",
@@ -83,12 +82,6 @@ name = "base64"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b41b7ea54a0c9d92199de89e20e58d49f02f8e699814ef3fdf266f6f748d15c7"
-
-[[package]]
-name = "base64"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 
 [[package]]
 name = "bincode"
@@ -213,15 +206,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cosmwasm-derive"
-version = "0.13.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de70197a0fe4e402aa260da00ec62d9bf091afe87866e9f3347691d591b60f89"
-dependencies = [
- "syn",
-]
-
-[[package]]
 name = "cosmwasm-schema"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -237,25 +221,11 @@ version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f85908a2696117c8f2c1b3ce201d34a1aa9a6b3c1583a65cfb794ec66e1cfde4"
 dependencies = [
- "base64 0.11.0",
+ "base64",
  "schemars",
  "serde",
  "serde-json-wasm",
  "snafu",
-]
-
-[[package]]
-name = "cosmwasm-std"
-version = "0.13.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02173c4eb78ef76863f5190f60a45278d11e7c8b142327c149e18128b2b97f85"
-dependencies = [
- "base64 0.13.0",
- "cosmwasm-derive",
- "schemars",
- "serde",
- "serde-json-wasm",
- "thiserror",
 ]
 
 [[package]]
@@ -264,7 +234,7 @@ version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e103531a2ce636e86b7639cec25d348c4d360832ab8e0e7f9a6e00f08aac1379"
 dependencies = [
- "cosmwasm-std 0.10.1",
+ "cosmwasm-std",
  "serde",
 ]
 
@@ -274,7 +244,7 @@ version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12d56a7ad7bbbf04b94a782f25fe50a9372067737f661931acf9d30668003efd"
 dependencies = [
- "cosmwasm-std 0.10.1",
+ "cosmwasm-std",
  "hex",
  "memmap",
  "parity-wasm",
@@ -427,7 +397,7 @@ dependencies = [
  "axelar-gateway",
  "cosmwasm-crypto",
  "cosmwasm-schema",
- "cosmwasm-std 0.10.1",
+ "cosmwasm-std",
  "cosmwasm-storage",
  "cosmwasm-vm",
  "hex",
@@ -460,47 +430,9 @@ version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b469bb5d63a036339cbb3042fb1254016b5d4889b15f420fea1c1339497b19de"
 dependencies = [
- "cosmwasm-std 0.10.1",
+ "cosmwasm-std",
  "schemars",
  "serde",
-]
-
-[[package]]
-name = "cw1"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fd8ef69e4b8d5f2dad526934904c40e916ca3e31ea3a0f644222a7f8f709f4b"
-dependencies = [
- "cosmwasm-std 0.10.1",
- "schemars",
- "serde",
-]
-
-[[package]]
-name = "cw1"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f1c01ba1c11955e8656b43a1dc35f940dff19e567d2f1769e534269f9d646bc"
-dependencies = [
- "cosmwasm-std 0.13.2",
- "schemars",
- "serde",
-]
-
-[[package]]
-name = "cw1-whitelist"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6232f5ee3e950afb3bef43d61ea556c2c8e08e35e02fc0a09dff0e18dd18d0c2"
-dependencies = [
- "cosmwasm-std 0.10.1",
- "cosmwasm-storage",
- "cw0",
- "cw1 0.2.3",
- "cw2",
- "schemars",
- "serde",
- "snafu",
 ]
 
 [[package]]
@@ -509,7 +441,7 @@ version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1a5dd960277ae9180e0077fcc8769928da2d9c1c42cc8c8c734c625c6f2a90b"
 dependencies = [
- "cosmwasm-std 0.10.1",
+ "cosmwasm-std",
  "cosmwasm-storage",
  "schemars",
  "serde",
@@ -521,7 +453,7 @@ version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ffd85ddcac2bf5c1899dd13e52985d260dae02db21a618d9d4c2c36dab63a915"
 dependencies = [
- "cosmwasm-std 0.10.1",
+ "cosmwasm-std",
  "cw0",
  "schemars",
  "serde",
@@ -533,7 +465,7 @@ version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c09657718df5243810b10d49359a352eed197966f578366624198fe1740fb52"
 dependencies = [
- "cosmwasm-std 0.10.1",
+ "cosmwasm-std",
  "cosmwasm-storage",
  "cw0",
  "cw2",
@@ -695,12 +627,10 @@ dependencies = [
  "axelar-gateway",
  "cosmwasm-crypto",
  "cosmwasm-schema",
- "cosmwasm-std 0.10.1",
+ "cosmwasm-std",
  "cosmwasm-storage",
  "cosmwasm-vm",
  "crypto-verify",
- "cw1 0.5.0",
- "cw1-whitelist",
  "k256",
  "rand_core",
  "schemars",
@@ -852,9 +782,9 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "libc"
-version = "0.2.91"
+version = "0.2.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8916b1f6ca17130ec6568feccee27c156ad12037880833a3b842a823236502e7"
+checksum = "56d855069fafbb9b344c0f962150cd2c1187975cb1c22c1522c240d8c4986714"
 
 [[package]]
 name = "lock_api"
@@ -1003,21 +933,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e0704ee1a7e00d7bb417d0770ea303c1bccbabf0ef1667dae92b5967f5f8a71"
 dependencies = [
  "unicode-xid",
-]
-
-[[package]]
-name = "proxy"
-version = "0.1.0"
-dependencies = [
- "axelar-gateway",
- "cosmwasm-schema",
- "cosmwasm-std 0.10.1",
- "cosmwasm-storage",
- "cw1 0.5.0",
- "cw1-whitelist",
- "schemars",
- "serde",
- "snafu",
 ]
 
 [[package]]
@@ -1355,21 +1270,9 @@ version = "0.1.0"
 dependencies = [
  "axelar-gateway",
  "cosmwasm-schema",
- "cosmwasm-std 0.10.1",
+ "cosmwasm-std",
  "cosmwasm-storage",
  "cw20",
- "schemars",
- "serde",
- "snafu",
-]
-
-[[package]]
-name = "tutorial"
-version = "0.1.0"
-dependencies = [
- "cosmwasm-schema",
- "cosmwasm-std 0.10.1",
- "cosmwasm-storage",
  "schemars",
  "serde",
  "snafu",

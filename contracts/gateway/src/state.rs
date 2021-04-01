@@ -56,28 +56,3 @@ impl Config {
     }
 }
 
-/*
-pub fn store_nonce<S: Storage>(
-    storage: &mut S,
-    public_key: &Vec<u8>,
-    nonce: &u64,
-) -> StdResult<()> {
-    PrefixedStorage::new(PREFIX_META_TX_NONCE, storage)
-        .set(public_key.as_slice(), address.as_slice());
-
-    Ok(())
-}
-
-pub fn read_nonce<S: Storage>(
-    storage: &S,
-    public_key: &Vec<u8>,
-) -> StdResult<u64> {
-    let res = ReadonlyPrefixedStorage::new(PREFIX_META_TX_NONCE, storage).get(public_key.as_slice());
-    match res {
-        Some(data) => Ok(u64::from(data)),
-        None => Err(StdError::generic_err(
-            "no registered public_key",
-        )),
-    }
-}
- */
