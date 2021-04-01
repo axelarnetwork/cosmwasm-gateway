@@ -5,12 +5,15 @@ use cosmwasm_std::{
     HandleResponse, HumanAddr, InitResponse, Querier, QueryResponse, StdError, StdResult, Storage,
     WasmQuery,
 };
+use k256::ecdsa::VerifyingKey;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::state::{read_config, store_config, Config};
 
-use axelar_gateway::crypto::{InitMsg as CryptoInitMsg, VerifyResponse as CryptoVerifyResponse, QueryMsg as CryptoQueryMsg};
+use axelar_gateway::crypto::{
+    InitMsg as CryptoInitMsg, QueryMsg as CryptoQueryMsg, VerifyResponse as CryptoVerifyResponse,
+};
 use axelar_gateway::gateway::{CanSendResponse, ConfigResponse, HandleMsg, InitMsg, QueryMsg};
 use sha3::{Digest, Keccak256};
 
@@ -26,7 +29,13 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         owner: CanonicalAddr::default(),
         public_key: vec![],
     };
-    cfg.update_owner(deps.api.canonical_address(&msg.owner)?, msg.public_key);
+
+    // sanitize pub_key
+    let pub_key =
+        VerifyingKey::from_sec1_bytes(Binary::from_base64(&msg.public_key).unwrap().as_slice())
+        .unwrap();
+
+    cfg.update_owner(deps.api.canonical_address(&msg.owner)?, pub_key.to_bytes().to_vec());
     store_config(&mut deps.storage, &cfg)?;
     Ok(InitResponse::default())
 }
@@ -171,7 +180,8 @@ where
 }
 
 pub fn digest_message_batch<T>(nonce: u64, msgs: &Vec<CosmosMsg<T>>) -> StdResult<Vec<u8>>
-    where T: Clone + fmt::Debug + PartialEq + JsonSchema + Serialize,
+where
+    T: Clone + fmt::Debug + PartialEq + JsonSchema + Serialize,
 {
     // serialize cosmos messages into base64 encoded json
     let mut bytes = msgs
@@ -240,20 +250,26 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::{CosmosMsg, StdError, WasmMsg, coins, from_binary, testing::{MockApi, MockQuerier, MockStorage}};
+    use cosmwasm_std::{
+        coins, from_binary,
+        testing::{MockApi, MockQuerier, MockStorage},
+        CosmosMsg, StdError, WasmMsg,
+    };
     use cosmwasm_std::{
         testing::{mock_dependencies, mock_env},
         HumanAddr,
     };
     use crypto_verify::contract as crypto_contract;
-    use cw1_whitelist::msg::AdminListResponse;
     use k256::{
-        EncodedPoint,
         ecdsa::{signature::Signer, signature::Verifier, Signature, SigningKey, VerifyingKey},
         elliptic_curve::sec1::ToEncodedPoint,
+        CompressedPoint, EncodedPoint,
     };
 
-use axelar_gateway::crypto::{InitMsg as CryptoInitMsg, VerifyResponse as CryptoVerifyResponse, QueryMsg as CryptoQueryMsg};
+    use axelar_gateway::crypto::{
+        InitMsg as CryptoInitMsg, QueryMsg as CryptoQueryMsg,
+        VerifyResponse as CryptoVerifyResponse,
+    };
     use axelar_gateway::gateway::{CanSendResponse, ConfigResponse, HandleMsg, InitMsg, QueryMsg};
     use rand_core::OsRng;
     use sha3::{Digest, Keccak256};
@@ -261,12 +277,28 @@ use axelar_gateway::crypto::{InitMsg as CryptoInitMsg, VerifyResponse as CryptoV
     const USE_POINT_COMPRESSION: bool = true;
     const CANONICAL_LENGTH: usize = 20;
 
+    const PUBLIC_KEY_BASE64_COMPRESSED: &str = "An8EV2ES3es3DPtkxcW9IomXEGBpv6NRGMYxoEYMH7fn";
 
-    fn setup_gateway(mut crypto_addr: HumanAddr) -> (Extern<MockStorage, MockApi, MockQuerier>, Env, HumanAddr, EncodedPoint, SigningKey) {
+    /// Create a base64 encoded string from a compressed SEC1-encoded secp256k1 point (public key bytes)
+    fn base64_str_from_sec1_bytes(pub_key: &CompressedPoint) -> String {
+        Binary::from(pub_key.as_ref()).to_base64()
+    }
+
+    fn setup_gateway(
+        mut crypto_addr: HumanAddr,
+    ) -> (
+        Extern<MockStorage, MockApi, MockQuerier>,
+        Env,
+        HumanAddr,
+        CompressedPoint,
+        SigningKey,
+    ) {
         let mut deps = mock_dependencies(CANONICAL_LENGTH, &[]);
 
         let priv_key = SigningKey::random(&mut OsRng); // Serialize with `::to_bytes()`
-        let pub_key = VerifyingKey::from(&priv_key).to_encoded_point(USE_POINT_COMPRESSION);
+        let verifying_key = VerifyingKey::from(&priv_key);
+        let pub_key = verifying_key.to_bytes(); // SEC-1 encoded compressed point
+
         let axelar = HumanAddr::from("axelar");
         if crypto_addr.len() == 0 {
             crypto_addr = HumanAddr::from("crypto_contract");
@@ -275,7 +307,7 @@ use axelar_gateway::crypto::{InitMsg as CryptoInitMsg, VerifyResponse as CryptoV
         // instantiate the contract
         let msg = InitMsg {
             owner: axelar.clone(),
-            public_key: Vec::<u8>::from(pub_key.as_bytes()),
+            public_key: base64_str_from_sec1_bytes(&pub_key),
             crypto_contract_addr: crypto_addr.clone(),
         };
 
@@ -285,7 +317,7 @@ use axelar_gateway::crypto::{InitMsg as CryptoInitMsg, VerifyResponse as CryptoV
         // ensure expected config
         let expected = ConfigResponse {
             owner: axelar.clone(),
-            public_key: Vec::<u8>::from(pub_key.as_bytes()),
+            public_key: pub_key.to_vec(),
             crypto_contract_addr: crypto_addr.clone(),
             nonce: 0u64,
             mutable: true,
@@ -298,9 +330,39 @@ use axelar_gateway::crypto::{InitMsg as CryptoInitMsg, VerifyResponse as CryptoV
 
     fn setup_crypto() -> Extern<MockStorage, MockApi, MockQuerier> {
         let mut deps = mock_dependencies(CANONICAL_LENGTH, &[]);
-        let res = crypto_contract::init(&mut deps, mock_env(HumanAddr::from("addr01"), &[]), CryptoInitMsg {}).unwrap();
+        let res = crypto_contract::init(
+            &mut deps,
+            mock_env(HumanAddr::from("addr01"), &[]),
+            CryptoInitMsg {},
+        )
+        .unwrap();
         assert_eq!(0, res.messages.len());
         deps
+    }
+
+    #[test]
+    fn pubkey_format() {
+        // This test serves as guide for producing a correctly encoded public key for
+        // the InitMsg{} and HandleMsg::UpdateOwner{} messages.
+
+        let priv_key = SigningKey::random(&mut OsRng); // Serialize with `::to_bytes()`
+        let verifying_key = VerifyingKey::from(&priv_key);
+        let pub_key = verifying_key.to_bytes();
+
+        // check base64 string representation maps correctly to SEC-1 bytes
+        // let pk_str = Binary::from(pub_key.as_ref()).to_base64();
+        let pk_str = base64_str_from_sec1_bytes(&pub_key);
+        let vk_import =
+            VerifyingKey::from_sec1_bytes(Binary::from_base64(&pk_str).unwrap().as_slice())
+                .unwrap();
+
+        // to compressed point
+        let imported_pub_key = vk_import.to_bytes();
+
+        // back to base64 str
+        let imp_str = Binary::from(imported_pub_key.as_ref()).to_base64();
+        assert_eq!(imported_pub_key, pub_key);
+        assert_eq!(imp_str, pk_str);
     }
 
     #[test]
@@ -311,17 +373,16 @@ use axelar_gateway::crypto::{InitMsg as CryptoInitMsg, VerifyResponse as CryptoV
     #[test]
     fn execute_signed() {
         let (mut deps, gateway_env, owner, pub_key, priv_key) = setup_gateway(HumanAddr::default());
-        println!("gateway_env {}", gateway_env.contract.address);
 
         let nonce = 0u64;
 
         let exec_msg = CosmosMsg::Wasm::<Empty>(WasmMsg::Execute {
             contract_addr: gateway_env.contract.address,
-            msg: to_binary(&HandleMsg::<Empty>::Freeze{}).unwrap(),
+            msg: to_binary(&HandleMsg::<Empty>::Freeze {}).unwrap(),
             send: vec![],
         });
 
-        let messages = vec![exec_msg.clone(),exec_msg.clone(),exec_msg.clone()];
+        let messages = vec![exec_msg.clone(), exec_msg.clone(), exec_msg.clone()];
 
         let digest = digest_message_batch(nonce, &messages).unwrap();
         let sig: Signature = priv_key.sign(digest.as_slice());
@@ -335,17 +396,18 @@ use axelar_gateway::crypto::{InitMsg as CryptoInitMsg, VerifyResponse as CryptoV
         let verify_msg = CryptoQueryMsg::VerifyCosmosSignature {
             message: Binary::from(digest.as_slice()),
             signature: Binary::from(sig.as_ref()),
-            public_key: Binary::from(pub_key.as_bytes()),
+            public_key: Binary::from(pub_key.as_ref()),
         };
         let crypto_deps = setup_crypto();
-        let raw = crypto_contract::query::<MockStorage, MockApi, MockQuerier>(&crypto_deps, verify_msg).unwrap();
+        let raw =
+            crypto_contract::query::<MockStorage, MockApi, MockQuerier>(&crypto_deps, verify_msg)
+                .unwrap();
         let res: CryptoVerifyResponse = from_binary(&raw).unwrap();
         assert_eq!(res, CryptoVerifyResponse { verifies: true });
-        println!("VerifyResponse {}", res.verifies);
-/*
-        // todo: how to simulate contract address in env?
-        let env = mock_env(HumanAddr::from("anyone"), &[]);
-        let rest = handle(&mut deps, env, msg).unwrap();
- */
+        /*
+               // todo: how to simulate contract address in env?
+               let env = mock_env(HumanAddr::from("anyone"), &[]);
+               let rest = handle(&mut deps, env, msg).unwrap();
+        */
     }
 }

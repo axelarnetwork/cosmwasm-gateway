@@ -8,7 +8,7 @@ This repository contains the source code for the core smart contracts implementi
 
 | Contract                                            | Reference                                              | Description                                                                                                                        |
 | --------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| [`proxy`](./contracts/proxy)  | [doc]() | CW1 implementation that supports meta transactions ("anyone-can-pay")                                              |
+| [`gateway`](./contracts/proxy)  | [doc]() | Proxy contract which relays messages from it owner to other contracts. Supports meta transactions ("anyone-can-pay")                                              |
 | [`token-factory`](./contracts/token-factory)      | [doc]()   |  Deploys token contracts that are controlled by an Axelar master address                                                        |
 | [`token`](./contracts/token)              | [doc]()       | CW20 implementation that represents a cross-chain asset |
 
