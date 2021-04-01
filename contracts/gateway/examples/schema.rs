@@ -3,8 +3,7 @@ use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
-use axelar_gateway::proxy::{HandleMsg, InitMsg, QueryMsg};
-use gateway_proxy::state::State;
+use axelar_gateway::gateway::{HandleMsg, InitMsg, QueryMsg, ConfigResponse, CanSendResponse};
 
 fn main() {
     let mut out_dir = current_dir().unwrap();
@@ -15,4 +14,6 @@ fn main() {
     export_schema(&schema_for!(InitMsg), &out_dir);
     export_schema(&schema_for!(HandleMsg), &out_dir);
     export_schema(&schema_for!(QueryMsg), &out_dir);
+    export_schema(&schema_for!(QueryMsg), &out_dir);
+    export_schema(&schema_for!(CanSendResponse), &out_dir);
 }

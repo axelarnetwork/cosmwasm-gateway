@@ -253,7 +253,7 @@ mod tests {
         elliptic_curve::sec1::ToEncodedPoint,
     };
 
-    use axelar_gateway::crypto::{InitMsg as CryptoInitMsg};
+use axelar_gateway::crypto::{InitMsg as CryptoInitMsg, VerifyResponse as CryptoVerifyResponse, QueryMsg as CryptoQueryMsg};
     use axelar_gateway::gateway::{CanSendResponse, ConfigResponse, HandleMsg, InitMsg, QueryMsg};
     use rand_core::OsRng;
     use sha3::{Digest, Keccak256};
@@ -310,14 +310,12 @@ mod tests {
 
     #[test]
     fn execute_signed() {
-        let crypto_deps = setup_crypto();
-        // todo: how to simulate contract address in env?
         let (mut deps, gateway_env, owner, pub_key, priv_key) = setup_gateway(HumanAddr::default());
         println!("gateway_env {}", gateway_env.contract.address);
 
         let nonce = 0u64;
 
-        let exec_msg = CosmosMsg::Wasm(WasmMsg::Execute {
+        let exec_msg = CosmosMsg::Wasm::<Empty>(WasmMsg::Execute {
             contract_addr: gateway_env.contract.address,
             msg: to_binary(&HandleMsg::<Empty>::Freeze{}).unwrap(),
             send: vec![],
@@ -333,8 +331,21 @@ mod tests {
             sig: Vec::<u8>::from(sig.as_ref()),
         };
 
+        // simulate query from gateway contract for now
+        let verify_msg = CryptoQueryMsg::VerifyCosmosSignature {
+            message: Binary::from(digest.as_slice()),
+            signature: Binary::from(sig.as_ref()),
+            public_key: Binary::from(pub_key.as_bytes()),
+        };
+        let crypto_deps = setup_crypto();
+        let raw = crypto_contract::query::<MockStorage, MockApi, MockQuerier>(&crypto_deps, verify_msg).unwrap();
+        let res: CryptoVerifyResponse = from_binary(&raw).unwrap();
+        assert_eq!(res, CryptoVerifyResponse { verifies: true });
+        println!("VerifyResponse {}", res.verifies);
+/*
+        // todo: how to simulate contract address in env?
         let env = mock_env(HumanAddr::from("anyone"), &[]);
         let rest = handle(&mut deps, env, msg).unwrap();
-
+ */
     }
 }
