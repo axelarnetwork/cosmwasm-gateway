@@ -5,7 +5,7 @@ use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
 use cw20::{ BalanceResponse, TokenInfoResponse, AllAccountsResponse };
 use cw20_base::msg::{MigrateMsg};
-use axelar_gateway::token::{InitMsg, QueryMsg, HandleMsg};
+use axelar_gateway_contracts::token::{InitMsg, QueryMsg, HandleMsg};
 
 fn main() {
     let mut out_dir = current_dir().unwrap();

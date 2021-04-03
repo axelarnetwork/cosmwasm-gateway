@@ -3,8 +3,8 @@ use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
-use axelar_gateway::token_factory::{HandleMsg, InitMsg, QueryMsg};
-use token_factory::state::Config;
+use axelar_gateway_contracts::token_factory::{HandleMsg, InitMsg, QueryMsg};
+use axelar_token_factory::state::Config;
 
 fn main() {
     let mut out_dir = current_dir().unwrap();

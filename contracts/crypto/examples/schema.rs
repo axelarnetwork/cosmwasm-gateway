@@ -3,7 +3,7 @@ use std::fs::create_dir_all;
 
 use cosmwasm_schema::{export_schema, remove_schemas, schema_for};
 
-use axelar_gateway::crypto::{InitMsg, QueryMsg};
+use axelar_gateway_contracts::crypto::{InitMsg, QueryMsg};
 
 fn main() {
     let mut out_dir = current_dir().unwrap();

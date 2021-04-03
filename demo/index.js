@@ -1,4 +1,4 @@
-import { LCDClient, MsgSend, MnemonicKey, MsgInstantiateContract, MsgStoreCode,  getCodeId, getContractAddress, isTxError, StdFee } from '@terra-money/terra.js';
+import { LCDClient, MsgSend, MnemonicKey, MsgInstantiateContract, MsgStoreCode,  getCodeId, getContractAddress, isTxError, StdFee, MsgExecuteContract } from '@terra-money/terra.js';
 
 import { Validator } from 'jsonschema';
 import { contractNames, load_schemas, load_wasm_binaries, write_contract_infos, read_contract_infos } from './contracts.js';
@@ -15,11 +15,11 @@ const Err = chalk.redBright;
 
 const COMPRESSED_BASE64_PUB_KEY = "WzMsODQsMTA5LDQwLDEwMiwyMTEsMjI3LDEyMyw0MCwxMjAsNjYsMTk4LDU5LDEwMiwxNDYsMjUwLDQ3LDM5LDE2MiwyNDYsMTQ0LDIyNywyNiwxNjUsNTYsMTg0LDMxLDEyNSw2NCwyOSwxMTgsMTM5LDI0N10=";
 
-const mustInstantiate = (r) => {
+const mustSucceed = (r, kind = 'transaction') => {
   if(isTxError(r)) {
     console.log(`TX hash: ${Err(r.txhash)}`);
     throw new Error(
-      `instantiate failed. code: ${r.code}, codespace: ${r.codespace}, raw_log: ${r.raw_log}`
+      `${kind} failed. code: ${r.code}, codespace: ${r.codespace}, raw_log: ${r.raw_log}`
     );
   }
   console.log(`TX hash: ${Success(r.txhash)}`)
@@ -84,28 +84,51 @@ function API(client, wallet) {
 
     let tx;
     try {
-      tx = await wallet.createAndSignTx({
-        msgs: [msg],
-        // fee: new StdFee(99999999999999, { uluna: 1133000000000 } ),
-      });
-    /* } catch(err) {
-      console.log(Err(`Failed to instantiate contract using code_id ${codeId}`));
-      console.log(err);
-      return;
-    } */
+      tx = await wallet.createAndSignTx({ msgs: [msg] });
     } catch({response: { data }}) {
       console.log(Err(`Failed to instantiate contract using code_id ${codeId}`));
       data && console.log(data);
       return;
     }
 
-    const txRes = mustInstantiate(await client.tx.broadcast(tx));
+    const txRes = mustSucceed(await client.tx.broadcast(tx), 'instantiate');
+
+    const contractAddress = getContractAddress(txRes);
+    return contractAddress;
+  }
+
+  async function execute_contract(contractAddr, handleMsg, handleSchema) {
+    if(handleSchema) {
+      const vres = validate_schema(handleMsg, handleSchema, { throwFirst: true });
+      if(vres.errors.length > 0) {
+        return new Error(vres.errors)
+      }
+    }
+    const msg = new MsgExecuteContract(
+      wallet.key.accAddress,
+      contractAddr,
+      { ...handleMsg },
+      {}, // init coins
+    );
+    console.dir(msg);
+
+    let tx;
+    try {
+      tx = await wallet.createAndSignTx({ msgs: [msg] });
+    } catch({response: { data }}) {
+      console.log(Err(`Failed to execute contract at ${contractAddr}`));
+      data && console.log(data);
+      return;
+    }
+
+    const txRes = mustSucceed(await client.tx.broadcast(tx), 'execute');
 
     const contractAddress = getContractAddress(txRes);
     return contractAddress;
   }
 
   return {
+    execute_contract,
     instantiate_contract,
     store_contracts,
   }
@@ -144,9 +167,31 @@ async function run() {
     public_key: COMPRESSED_BASE64_PUB_KEY,
     crypto_contract_addr: crypto_addr,
   });
+
+
+  // todo: verify schema
+  const tokenFactoryInitMsg = new MsgInstantiateContract(
+    wallet.key.accAddress,
+    parseInt(contractInfos['axelar_token_factory'].codeId),
+    {
+      owner: gateway_addr,
+      token_code_id: parseInt(contractInfos['axelar_token'].codeId)
+    },
+    {}, // init coins
+    false // migratable
+  );
+
+  const schema = schemas['axelar_gateway'].handle_msg;
+
+  // instantiate token factory
+  await api.execute_contract(gateway_addr, {
+    execute: {
+      msgs: [{ wasm: { instantiate: tokenFactoryInitMsg } }],
+    }
+  }, schema);
 }
 
-run();
+run().catch(console.log)
 
 function TxOptions() {
   /* msgs: Msg[];
