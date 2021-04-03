@@ -1,11 +1,11 @@
 use std::fmt;
 
 use cosmwasm_std::{
-    log, to_binary, to_vec, Api, Binary, CanonicalAddr, CosmosMsg, Empty, Env, Extern,
+    log, to_binary, from_binary, to_vec, Api, Binary, CanonicalAddr, CosmosMsg, Empty, Env, Extern,
     HandleResponse, HumanAddr, InitResponse, Querier, QueryResponse, StdError, StdResult, Storage,
     WasmQuery,
 };
-use k256::ecdsa::VerifyingKey;
+use k256::{CompressedPoint, ecdsa::VerifyingKey};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -31,11 +31,12 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
     };
 
     // sanitize pub_key
-    let pub_key =
-        VerifyingKey::from_sec1_bytes(Binary::from_base64(&msg.public_key).unwrap().as_slice())
-        .unwrap();
+    let verifying_key = verifyingKey_from_base64_str(&msg.public_key)?;
 
-    cfg.update_owner(deps.api.canonical_address(&msg.owner)?, pub_key.to_bytes().to_vec());
+    // cfg.update_owner(deps.api.canonical_address(&msg.owner)?, pub_key.to_bytes().to_vec());
+    cfg.public_key = verifying_key.to_bytes().to_vec();
+    cfg.owner = deps.api.canonical_address(&msg.owner)?;
+
     store_config(&mut deps.storage, &cfg)?;
     Ok(InitResponse::default())
 }
@@ -247,19 +248,32 @@ where
     })
 }
 
+/// Create a base64 encoded string from a compressed SEC1-encoded secp256k1 point (public key bytes)
+fn base64_str_from_sec1_bytes(pub_key: &CompressedPoint) -> String {
+    let vec = &pub_key.to_vec();
+    let bin = to_binary(pub_key.as_ref()).unwrap();
+    bin.to_base64()
+}
+
+fn verifyingKey_from_base64_str(pk_str: &str) -> StdResult<VerifyingKey> {
+    let bin = Binary::from_base64(pk_str)?;
+    let key_vec: Vec<u8> = from_binary(&bin)?;
+    match VerifyingKey::from_sec1_bytes(key_vec.as_slice()) {
+        Ok(vk) => Ok(vk),
+        Err(err) => return Err(StdError::generic_err("failed to deserialize public key")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use cosmwasm_std::{
-        coins, from_binary,
-        testing::{MockApi, MockQuerier, MockStorage},
+        coins, from_binary,Binary,
+        testing::{MockApi, MockQuerier, MockStorage, mock_dependencies, mock_env},
         CosmosMsg, StdError, WasmMsg,
-    };
-    use cosmwasm_std::{
-        testing::{mock_dependencies, mock_env},
         HumanAddr,
     };
-    use crypto_verify::contract as crypto_contract;
+    use axelar_crypto::contract as crypto_contract;
     use k256::{
         ecdsa::{signature::Signer, signature::Verifier, Signature, SigningKey, VerifyingKey},
         elliptic_curve::sec1::ToEncodedPoint,
@@ -277,12 +291,8 @@ mod tests {
     const USE_POINT_COMPRESSION: bool = true;
     const CANONICAL_LENGTH: usize = 20;
 
-    const PUBLIC_KEY_BASE64_COMPRESSED: &str = "An8EV2ES3es3DPtkxcW9IomXEGBpv6NRGMYxoEYMH7fn";
-
-    /// Create a base64 encoded string from a compressed SEC1-encoded secp256k1 point (public key bytes)
-    fn base64_str_from_sec1_bytes(pub_key: &CompressedPoint) -> String {
-        Binary::from(pub_key.as_ref()).to_base64()
-    }
+    // default localterra public key
+    const PUBLIC_KEY_BASE64_COMPRESSED: &str = "";
 
     fn setup_gateway(
         mut crypto_addr: HumanAddr,
@@ -350,19 +360,22 @@ mod tests {
         let pub_key = verifying_key.to_bytes();
 
         // check base64 string representation maps correctly to SEC-1 bytes
-        // let pk_str = Binary::from(pub_key.as_ref()).to_base64();
         let pk_str = base64_str_from_sec1_bytes(&pub_key);
-        let vk_import =
-            VerifyingKey::from_sec1_bytes(Binary::from_base64(&pk_str).unwrap().as_slice())
-                .unwrap();
+        println!("pk_str {}", pk_str);
+        let vk_import = verifyingKey_from_base64_str(&pk_str).unwrap();
 
         // to compressed point
         let imported_pub_key = vk_import.to_bytes();
 
         // back to base64 str
-        let imp_str = Binary::from(imported_pub_key.as_ref()).to_base64();
+        let imp_str = base64_str_from_sec1_bytes(&imported_pub_key);
         assert_eq!(imported_pub_key, pub_key);
         assert_eq!(imp_str, pk_str);
+
+        // test key created using terra.js
+        /* let verifying_key = verifyingKey_from_base64_str(PUBLIC_KEY_BASE64_COMPRESSED).unwrap();
+        let imp_str = base64_str_from_sec1_bytes(&verifying_key.to_bytes());
+        assert_eq!(PUBLIC_KEY_BASE64_COMPRESSED, imp_str); */
     }
 
     #[test]

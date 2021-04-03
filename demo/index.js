@@ -13,6 +13,8 @@ const Info = chalk.blueBright;
 const Success = chalk.greenBright;
 const Err = chalk.redBright;
 
+const COMPRESSED_BASE64_PUB_KEY = "WzMsODQsMTA5LDQwLDEwMiwyMTEsMjI3LDEyMyw0MCwxMjAsNjYsMTk4LDU5LDEwMiwxNDYsMjUwLDQ3LDM5LDE2MiwyNDYsMTQ0LDIyNywyNiwxNjUsNTYsMTg0LDMxLDEyNSw2NCwyOSwxMTgsMTM5LDI0N10=";
+
 const mustInstantiate = (r) => {
   if(isTxError(r)) {
     console.log(`TX hash: ${Err(r.txhash)}`);
@@ -84,7 +86,13 @@ function API(client, wallet) {
     try {
       tx = await wallet.createAndSignTx({
         msgs: [msg],
+        // fee: new StdFee(99999999999999, { uluna: 1133000000000 } ),
       });
+    /* } catch(err) {
+      console.log(Err(`Failed to instantiate contract using code_id ${codeId}`));
+      console.log(err);
+      return;
+    } */
     } catch({response: { data }}) {
       console.log(Err(`Failed to instantiate contract using code_id ${codeId}`));
       data && console.log(data);
@@ -129,6 +137,13 @@ async function run() {
   const init_contract = (name, initMsg) => api.instantiate_contract(contractInfos[name].codeId, initMsg, schemas[name].init_msg);
 
   const crypto_addr = await init_contract('axelar_crypto', {});
+
+  const gateway_addr = await init_contract('axelar_gateway', {
+    owner: wallet.key.accAddress,
+    // public_key: wallet.key.rawPubKey.toString('base64'),
+    public_key: COMPRESSED_BASE64_PUB_KEY,
+    crypto_contract_addr: crypto_addr,
+  });
 }
 
 run();
