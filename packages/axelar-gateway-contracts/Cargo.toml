@@ -1,5 +1,5 @@
 [package]
-name = "axelar-gateway"
+name = "axelar-gateway-contracts"
 version = "0.1.0"
 authors = ["Axelar Network"]
 edition = "2018"

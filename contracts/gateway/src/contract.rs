@@ -11,10 +11,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::state::{read_config, store_config, Config};
 
-use axelar_gateway::crypto::{
+use axelar_gateway_contracts::crypto::{
     InitMsg as CryptoInitMsg, QueryMsg as CryptoQueryMsg, VerifyResponse as CryptoVerifyResponse,
 };
-use axelar_gateway::gateway::{CanSendResponse, ConfigResponse, HandleMsg, InitMsg, QueryMsg};
+use axelar_gateway_contracts::gateway::{CanSendResponse, ConfigResponse, HandleMsg, InitMsg, QueryMsg};
 use sha3::{Digest, Keccak256};
 
 pub fn init<S: Storage, A: Api, Q: Querier>(
@@ -266,11 +266,11 @@ mod tests {
         CompressedPoint, EncodedPoint,
     };
 
-    use axelar_gateway::crypto::{
+    use axelar_gateway_contracts::crypto::{
         InitMsg as CryptoInitMsg, QueryMsg as CryptoQueryMsg,
         VerifyResponse as CryptoVerifyResponse,
     };
-    use axelar_gateway::gateway::{CanSendResponse, ConfigResponse, HandleMsg, InitMsg, QueryMsg};
+    use axelar_gateway_contracts::gateway::{CanSendResponse, ConfigResponse, HandleMsg, InitMsg, QueryMsg};
     use rand_core::OsRng;
     use sha3::{Digest, Keccak256};
 

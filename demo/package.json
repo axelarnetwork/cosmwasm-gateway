@@ -13,6 +13,7 @@
   "dependencies": {
     "@terra-money/terra.js": "^1.6.0",
     "chalk": "^4.1.0",
-    "jsonschema": "^1.4.0"
+    "jsonschema": "^1.4.0",
+    "minimist": "^1.2.5"
   }
 }

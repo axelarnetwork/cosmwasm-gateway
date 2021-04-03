@@ -5,7 +5,7 @@ use cosmwasm_std::{
 
 use cw20::MinterResponse;
 
-use axelar_gateway::{
+use axelar_gateway_contracts::{
     hook::InitHook,
     token::InitMsg as TokenInitMsg,
     token_factory::{ConfigResponse, HandleMsg, InitMsg, QueryMsg, TokenAddressResponse},
