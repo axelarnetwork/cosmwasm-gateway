@@ -1,21 +1,30 @@
 use std::fmt;
 
 use cosmwasm_std::{
-    log, to_binary, from_binary, to_vec, Api, Binary, CanonicalAddr, CosmosMsg, Empty, Env, Extern,
+    from_binary, log, to_binary, to_vec, Api, Binary, CanonicalAddr, CosmosMsg, Empty, Env, Extern,
     HandleResponse, HumanAddr, InitResponse, Querier, QueryResponse, StdError, StdResult, Storage,
     WasmQuery,
 };
-use k256::{CompressedPoint, ecdsa::VerifyingKey};
+use k256::{ecdsa::VerifyingKey, CompressedPoint};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::state::{read_config, store_config, Config};
+use crate::state::{
+    read_config, read_contract_address, store_config, store_contract_address,
+    verifying_key_from_base64_str, Config,
+};
 
 use axelar_gateway_contracts::crypto::{
     InitMsg as CryptoInitMsg, QueryMsg as CryptoQueryMsg, VerifyResponse as CryptoVerifyResponse,
 };
-use axelar_gateway_contracts::gateway::{CanSendResponse, ConfigResponse, HandleMsg, InitMsg, QueryMsg};
+use axelar_gateway_contracts::gateway::{
+    CanSendResponse, ConfigResponse, HandleMsg, InitMsg, QueryMsg, ContractAddressResponse
+};
 use sha3::{Digest, Keccak256};
+
+pub static ATTR_NEW_OWNER: &str = "new_owner";
+pub static ATTR_PREV_OWNER: &str = "previous_owner";
+pub static ACTION_OWNERSHIP: &str = "ownership";
 
 pub fn init<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
@@ -29,16 +38,17 @@ pub fn init<S: Storage, A: Api, Q: Querier>(
         owner: CanonicalAddr::default(),
         public_key: vec![],
     };
-
-    // sanitize pub_key
-    let verifying_key = verifyingKey_from_base64_str(&msg.public_key)?;
-
-    // cfg.update_owner(deps.api.canonical_address(&msg.owner)?, pub_key.to_bytes().to_vec());
-    cfg.public_key = verifying_key.to_bytes().to_vec();
-    cfg.owner = deps.api.canonical_address(&msg.owner)?;
+    cfg.update_owner(deps.api.canonical_address(&msg.owner)?, &msg.public_key)?;
 
     store_config(&mut deps.storage, &cfg)?;
-    Ok(InitResponse::default())
+    Ok(InitResponse {
+        log: vec![
+            log("action", ACTION_OWNERSHIP),
+            log(ATTR_PREV_OWNER, "0"),
+            log(ATTR_NEW_OWNER, msg.owner),
+        ],
+        messages: vec![],
+    })
 }
 
 pub fn handle<S: Storage, A: Api, Q: Querier>(
@@ -47,8 +57,13 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
     msg: HandleMsg,
 ) -> StdResult<HandleResponse> {
     match msg {
-        HandleMsg::ExecuteSigned { msgs, sig } => handle_execute_signed(deps, env, msgs, sig),
-        HandleMsg::Execute { msgs } => handle_execute(deps, env, msgs),
+        HandleMsg::ExecuteSigned {
+            sig,
+            msgs,
+            register,
+        } => handle_execute_signed(deps, env, msgs, register, sig),
+        HandleMsg::Execute { msgs, register } => handle_execute(deps, env, msgs, register),
+        HandleMsg::Register { name } => handle_register_contract(deps, env, name),
         HandleMsg::UpdateOwner { owner, public_key } => {
             handle_update_owner(deps, env, owner, public_key)
         }
@@ -56,22 +71,51 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
     }
 }
 
+pub fn handle_register_contract<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    env: Env,
+    name: String,
+) -> StdResult<HandleResponse> {
+    let contract_addr = read_contract_address(&deps.storage, &name)?; // fails if name not deployed
+    if contract_addr != CanonicalAddr::default() {
+        return Err(StdError::generic_err("contract already registered"));
+    }
+
+    let contract_addr = deps.api.canonical_address(&env.message.sender)?;
+
+    // mark intent to register contract address post-initialization
+    store_contract_address(&mut deps.storage, &name, &contract_addr)?;
+
+    Ok(HandleResponse {
+        messages: vec![],
+        log: vec![
+            log("action", "register"),
+            log("contract_addr", contract_addr),
+        ],
+        data: None,
+    })
+}
+
 pub fn handle_update_owner<S: Storage, A: Api, Q: Querier>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     owner: HumanAddr,
-    public_key: Vec<u8>,
+    public_key: String,
 ) -> StdResult<HandleResponse> {
     must_be_owner(&deps, &env)?;
     must_not_be_frozen(&deps, &env)?;
     let mut cfg = read_config(&deps.storage)?;
+    let prev_owner = deps.api.human_address(&cfg.owner)?;
 
-    let owner = deps.api.canonical_address(&owner)?;
-    cfg.update_owner(owner, public_key)?;
+    cfg.update_owner(deps.api.canonical_address(&owner)?, &public_key)?;
     store_config(&mut deps.storage, &cfg)?;
 
     let mut res = HandleResponse::default();
-    res.log = vec![log("action", "update_owner")];
+    res.log = vec![
+        log("action", ACTION_OWNERSHIP),
+        log(ATTR_PREV_OWNER, prev_owner),
+        log(ATTR_NEW_OWNER, owner),
+    ];
     Ok(res)
 }
 
@@ -94,7 +138,7 @@ pub fn must_be_owner<S: Storage, A: Api, Q: Querier>(
         return Ok(());
     }
 
-    if deps.api.canonical_address(&env.message.sender)? != read_config(&deps.storage)?.owner {
+    if deps.api.canonical_address(&env.message.sender)? == read_config(&deps.storage)?.owner {
         return Ok(());
     }
 
@@ -106,6 +150,7 @@ pub fn handle_execute_signed<S: Storage, A: Api, Q: Querier, T>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     msgs: Vec<CosmosMsg<T>>,
+    register: Vec<String>,
     sig: Vec<u8>,
 ) -> StdResult<HandleResponse<T>>
 where
@@ -118,29 +163,52 @@ where
     } else {
         let mut cfg = read_config(&deps.storage)?;
         cfg.increment_nonce();
+        store_config(&mut deps.storage, &cfg)?;
+
+        store_registration_intent(deps, register)?;
+
         let mut res = HandleResponse::default();
         res.messages = msgs;
         res.log = vec![log("action", "execute")];
         Ok(res)
     }
 }
-
 pub fn handle_execute<S: Storage, A: Api, Q: Querier, T>(
     deps: &mut Extern<S, A, Q>,
     env: Env,
     msgs: Vec<CosmosMsg<T>>,
+    register: Vec<String>,
 ) -> StdResult<HandleResponse<T>>
 where
     T: Clone + fmt::Debug + PartialEq + JsonSchema,
 {
     must_be_owner(&deps, &env)?;
 
-    let mut cfg = read_config(&deps.storage)?;
-    cfg.increment_nonce();
+    store_registration_intent(deps, register)?;
+
     let mut res = HandleResponse::default();
     res.messages = msgs;
+
+    // todo: log registered names
     res.log = vec![log("action", "execute")];
     Ok(res)
+}
+
+pub fn store_registration_intent<S: Storage, A: Api, Q: Querier>(
+    deps: &mut Extern<S, A, Q>,
+    names: Vec<String>,
+) -> StdResult<()> {
+    names
+        .iter()
+        .map(|name| {
+            if read_contract_address(&deps.storage, &name).is_ok() {
+                return Err(StdError::generic_err("contract already exists"));
+            }
+
+            // mark intent to register contract address post-initialization
+            store_contract_address(&mut deps.storage, &name, &CanonicalAddr::default())
+        })
+        .collect::<StdResult<()>>()
 }
 
 fn verify_signed_by_owner<S: Storage, A: Api, Q: Querier, T>(
@@ -248,32 +316,31 @@ where
     })
 }
 
-/// Create a base64 encoded string from a compressed SEC1-encoded secp256k1 point (public key bytes)
-fn base64_str_from_sec1_bytes(pub_key: &CompressedPoint) -> String {
-    let vec = &pub_key.to_vec();
-    let bin = to_binary(pub_key.as_ref()).unwrap();
-    bin.to_base64()
-}
+fn query_contract_address<S: Storage, A: Api, Q: Querier>(
+    deps: &Extern<S, A, Q>,
+    name: String,
+) -> StdResult<ContractAddressResponse> {
+    let canon_addr = read_contract_address(&deps.storage, &name)?;
 
-fn verifyingKey_from_base64_str(pk_str: &str) -> StdResult<VerifyingKey> {
-    let bin = Binary::from_base64(pk_str)?;
-    let key_vec: Vec<u8> = from_binary(&bin)?;
-    match VerifyingKey::from_sec1_bytes(key_vec.as_slice()) {
-        Ok(vk) => Ok(vk),
-        Err(err) => return Err(StdError::generic_err("failed to deserialize public key")),
-    }
+    let contract_address = match canon_addr.len() {
+        0 => HumanAddr::default(), // test api will panic if canon_addr = CanonAddr::default()
+        _ => deps.api.human_address(&canon_addr)?,
+    };
+
+    Ok(ContractAddressResponse {
+        contract_addr: contract_address,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::{
-        coins, from_binary,Binary,
-        testing::{MockApi, MockQuerier, MockStorage, mock_dependencies, mock_env},
-        CosmosMsg, StdError, WasmMsg,
-        HumanAddr,
-    };
     use axelar_crypto::contract as crypto_contract;
+    use cosmwasm_std::{
+        coins, from_binary,
+        testing::{mock_dependencies, mock_env, MockApi, MockQuerier, MockStorage},
+        Binary, CosmosMsg, HumanAddr, StdError, WasmMsg,
+    };
     use k256::{
         ecdsa::{signature::Signer, signature::Verifier, Signature, SigningKey, VerifyingKey},
         elliptic_curve::sec1::ToEncodedPoint,
@@ -284,9 +351,13 @@ mod tests {
         InitMsg as CryptoInitMsg, QueryMsg as CryptoQueryMsg,
         VerifyResponse as CryptoVerifyResponse,
     };
-    use axelar_gateway_contracts::gateway::{CanSendResponse, ConfigResponse, HandleMsg, InitMsg, QueryMsg};
+    use axelar_gateway_contracts::gateway::{
+        CanSendResponse, ConfigResponse, HandleMsg, InitMsg, QueryMsg,
+    };
     use rand_core::OsRng;
     use sha3::{Digest, Keccak256};
+
+    use crate::state::{base64_str_from_sec1_bytes, verifying_key_from_base64_str};
 
     const USE_POINT_COMPRESSION: bool = true;
     const CANONICAL_LENGTH: usize = 20;
@@ -362,7 +433,7 @@ mod tests {
         // check base64 string representation maps correctly to SEC-1 bytes
         let pk_str = base64_str_from_sec1_bytes(&pub_key);
         println!("pk_str {}", pk_str);
-        let vk_import = verifyingKey_from_base64_str(&pk_str).unwrap();
+        let vk_import = verifying_key_from_base64_str(&pk_str).unwrap();
 
         // to compressed point
         let imported_pub_key = vk_import.to_bytes();
@@ -373,7 +444,7 @@ mod tests {
         assert_eq!(imp_str, pk_str);
 
         // test key created using terra.js
-        /* let verifying_key = verifyingKey_from_base64_str(PUBLIC_KEY_BASE64_COMPRESSED).unwrap();
+        /* let verifying_key = verifying_key_from_base64_str(PUBLIC_KEY_BASE64_COMPRESSED).unwrap();
         let imp_str = base64_str_from_sec1_bytes(&verifying_key.to_bytes());
         assert_eq!(PUBLIC_KEY_BASE64_COMPRESSED, imp_str); */
     }
@@ -403,6 +474,7 @@ mod tests {
         let msg = HandleMsg::ExecuteSigned {
             msgs: messages,
             sig: Vec::<u8>::from(sig.as_ref()),
+            register: vec![],
         };
 
         // simulate query from gateway contract for now

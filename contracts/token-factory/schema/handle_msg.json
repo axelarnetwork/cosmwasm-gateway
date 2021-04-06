@@ -3,39 +3,7 @@
   "title": "HandleMsg",
   "anyOf": [
     {
-      "type": "object",
-      "required": [
-        "deploy_token"
-      ],
-      "properties": {
-        "deploy_token": {
-          "type": "object",
-          "required": [
-            "cap",
-            "decimals",
-            "name",
-            "symbol"
-          ],
-          "properties": {
-            "cap": {
-              "$ref": "#/definitions/Uint128"
-            },
-            "decimals": {
-              "type": "integer",
-              "format": "uint8",
-              "minimum": 0.0
-            },
-            "name": {
-              "type": "string"
-            },
-            "symbol": {
-              "type": "string"
-            }
-          }
-        }
-      }
-    },
-    {
+      "description": "Withdraw is a custom Axelar Gateway message to initate a cross-chain transfer",
       "type": "object",
       "required": [
         "withdraw"
@@ -44,34 +12,117 @@
         "withdraw": {
           "type": "object",
           "required": [
-            "address",
-            "symbol"
+            "amount",
+            "recipient"
           ],
           "properties": {
-            "address": {
-              "type": "string"
+            "amount": {
+              "$ref": "#/definitions/Uint128"
             },
-            "symbol": {
-              "type": "string"
+            "recipient": {
+              "$ref": "#/definitions/HumanAddr"
             }
           }
         }
       }
     },
     {
+      "description": "Transfer is a base message to move tokens to another account without triggering actions",
       "type": "object",
       "required": [
-        "register"
+        "transfer"
       ],
       "properties": {
-        "register": {
+        "transfer": {
           "type": "object",
           "required": [
-            "symbol"
+            "amount",
+            "recipient"
           ],
           "properties": {
-            "symbol": {
-              "type": "string"
+            "amount": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "recipient": {
+              "$ref": "#/definitions/HumanAddr"
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "Burn is a base message to destroy tokens forever",
+      "type": "object",
+      "required": [
+        "burn"
+      ],
+      "properties": {
+        "burn": {
+          "type": "object",
+          "required": [
+            "amount"
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "#/definitions/Uint128"
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "Send is a base message to transfer tokens to a contract and trigger an action on the receiving contract.",
+      "type": "object",
+      "required": [
+        "send"
+      ],
+      "properties": {
+        "send": {
+          "type": "object",
+          "required": [
+            "amount",
+            "contract"
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "contract": {
+              "$ref": "#/definitions/HumanAddr"
+            },
+            "msg": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Binary"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "Only with the \"mintable\" extension. If authorized, creates amount new tokens and adds to the recipient balance.",
+      "type": "object",
+      "required": [
+        "mint"
+      ],
+      "properties": {
+        "mint": {
+          "type": "object",
+          "required": [
+            "amount",
+            "recipient"
+          ],
+          "properties": {
+            "amount": {
+              "$ref": "#/definitions/Uint128"
+            },
+            "recipient": {
+              "$ref": "#/definitions/HumanAddr"
             }
           }
         }
@@ -79,6 +130,13 @@
     }
   ],
   "definitions": {
+    "Binary": {
+      "description": "Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>",
+      "type": "string"
+    },
+    "HumanAddr": {
+      "type": "string"
+    },
     "Uint128": {
       "type": "string"
     }

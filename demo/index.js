@@ -1,4 +1,4 @@
-import { LCDClient, MsgSend, MnemonicKey, MsgInstantiateContract, MsgStoreCode,  getCodeId, getContractAddress, isTxError, StdFee, MsgExecuteContract } from '@terra-money/terra.js';
+import { dictToB64, LCDClient, MsgSend, MnemonicKey, MsgInstantiateContract, MsgStoreCode,  getCodeId, getContractAddress, isTxError, StdFee, MsgExecuteContract } from '@terra-money/terra.js';
 
 import { Validator } from 'jsonschema';
 import { contractNames, load_schemas, load_wasm_binaries, write_contract_infos, read_contract_infos } from './contracts.js';
@@ -12,10 +12,9 @@ const validate_schema = (...args) => validator.validate(...args);
 const Info = chalk.blueBright;
 const Success = chalk.greenBright;
 const Err = chalk.redBright;
-
 const COMPRESSED_BASE64_PUB_KEY = "WzMsODQsMTA5LDQwLDEwMiwyMTEsMjI3LDEyMyw0MCwxMjAsNjYsMTk4LDU5LDEwMiwxNDYsMjUwLDQ3LDM5LDE2MiwyNDYsMTQ0LDIyNywyNiwxNjUsNTYsMTg0LDMxLDEyNSw2NCwyOSwxMTgsMTM5LDI0N10=";
 
-const mustSucceed = (r, kind = 'transaction') => {
+const txMustSucceed = (r, kind = 'transaction') => {
   if(isTxError(r)) {
     console.log(`TX hash: ${Err(r.txhash)}`);
     throw new Error(
@@ -27,9 +26,9 @@ const mustSucceed = (r, kind = 'transaction') => {
 }
 
 const parseCliArgs =() => parseArgs(process.argv.slice(2), {
-  string: ['networkId'],
+  string: ['networkId', 'gateway_addr'],
   boolean: ['store'],
-  default: { store: true, networkId: 'local' },
+  default: { store: true, networkId: 'local', gateway_addr: '' },
 });
 
 function API(client, wallet) {
@@ -68,14 +67,14 @@ function API(client, wallet) {
 
   async function instantiate_contract(codeId, initMsg, initSchema) {
     if(initSchema) {
-      const vres = validate_schema(initMsg, initSchema);
+      const vres = validate_schema(initMsg, initSchema, { throwFirst: true });
       if(vres.errors.length > 0) {
         return new Error(vres.errors)
       }
     }
     const msg = new MsgInstantiateContract(
       wallet.key.accAddress,
-      parseInt(codeId),
+      +codeId,
       initMsg,
       {}, // init coins
       false // migratable
@@ -91,7 +90,7 @@ function API(client, wallet) {
       return;
     }
 
-    const txRes = mustSucceed(await client.tx.broadcast(tx), 'instantiate');
+    const txRes = txMustSucceed(await client.tx.broadcast(tx), 'instantiate');
 
     const contractAddress = getContractAddress(txRes);
     return contractAddress;
@@ -107,8 +106,7 @@ function API(client, wallet) {
     const msg = new MsgExecuteContract(
       wallet.key.accAddress,
       contractAddr,
-      { ...handleMsg },
-      {}, // init coins
+      handleMsg,
     );
     console.dir(msg);
 
@@ -121,7 +119,7 @@ function API(client, wallet) {
       return;
     }
 
-    const txRes = mustSucceed(await client.tx.broadcast(tx), 'execute');
+    const txRes = txMustSucceed(await client.tx.broadcast(tx), 'execute');
 
     const contractAddress = getContractAddress(txRes);
     return contractAddress;
@@ -131,6 +129,19 @@ function API(client, wallet) {
     execute_contract,
     instantiate_contract,
     store_contracts,
+  }
+}
+
+function initMsgToWasmMsg(initMsg, label = '') {
+  const { owner, code_id, init_msg, init_coins, migratable } = initMsg.toData().value;
+
+  return {
+    wasm: { instantiate: { 
+      code_id: +code_id,
+      msg: init_msg,
+      send: init_coins,
+      label: label,
+    } }
   }
 }
 
@@ -158,21 +169,22 @@ async function run() {
   }
 
   const init_contract = (name, initMsg) => api.instantiate_contract(contractInfos[name].codeId, initMsg, schemas[name].init_msg);
-
   const crypto_addr = await init_contract('axelar_crypto', {});
 
-  const gateway_addr = await init_contract('axelar_gateway', {
-    owner: wallet.key.accAddress,
-    // public_key: wallet.key.rawPubKey.toString('base64'),
-    public_key: COMPRESSED_BASE64_PUB_KEY,
-    crypto_contract_addr: crypto_addr,
-  });
-
+  const gateway_addr = !argv.gateway_addr.length 
+    ? (await init_contract('axelar_gateway', {
+      owner: wallet.key.accAddress,
+      // public_key: wallet.key.rawPubKey.toString('base64'),
+      public_key: COMPRESSED_BASE64_PUB_KEY,
+      crypto_contract_addr: crypto_addr,
+    })) 
+    : argv.gateway_addr;
 
   // todo: verify schema
   const tokenFactoryInitMsg = new MsgInstantiateContract(
-    wallet.key.accAddress,
-    parseInt(contractInfos['axelar_token_factory'].codeId),
+    gateway_addr,
+    +contractInfos['axelar_token_factory'].codeId,
+    // parseInt(contractInfos['axelar_token_factory'].codeId),
     {
       owner: gateway_addr,
       token_code_id: parseInt(contractInfos['axelar_token'].codeId)
@@ -181,25 +193,54 @@ async function run() {
     false // migratable
   );
 
-  const schema = schemas['axelar_gateway'].handle_msg;
+  const wasmMsg = initMsgToWasmMsg(tokenFactoryInitMsg);
+  console.dir(wasmMsg, { depth: 10 })
 
   // instantiate token factory
-  await api.execute_contract(gateway_addr, {
-    execute: {
-      msgs: [{ wasm: { instantiate: tokenFactoryInitMsg } }],
-    }
-  }, schema);
+  await api.execute_contract(
+    gateway_addr, {
+      execute: {
+        // msgs: [ { wasm:  { instantiate: tokenFactoryInitMsg.toData().value } } ],
+        msgs: [wasmMsg],
+      }
+    }, 
+    schemas['axelar_gateway'].handle_msg,
+  );
 }
 
-run().catch(console.log)
+  async function assertCanInitToken(init_contract, wallet) {
+    const token_addr = await init_contract('axelar_token', {
+      owner: wallet.key.accAddress,
+      name: 'Satoshi',
+      symbol: 'satoshi',
+      decimals: 8,
+      initial_balances: [],
+      mint: {
+        minter: wallet.key.accAddress,
+        cap: '1000000',
+      },
+      // init_hook: {},
+    });
+    return true;
+  }
 
-function TxOptions() {
-  /* msgs: Msg[];
-  fee?: StdFee;
-  memo?: string;
-  gasPrices?: Coins.Input;
-  gasAdjustment?: Numeric.Input;
-  feeDenoms?: string[];
-  account_number?: number;
-  sequence?: number; */
-}
+  async function assertCanInitTokenFactory(init_contract, wallet, contractInfos) {
+    const token_factory_addr = await init_contract('axelar_token_factory', {
+      owner: wallet.key.accAddress,
+      token_code_id: parseInt(contractInfos['axelar_token'].codeId),
+    });
+    return true;
+  }
+
+  run().catch(console.log)
+
+  function TxOptions() {
+    /* msgs: Msg[];
+    fee?: StdFee;
+    memo?: string;
+    gasPrices?: Coins.Input;
+    gasAdjustment?: Numeric.Input;
+    feeDenoms?: string[];
+    account_number?: number;
+    sequence?: number; */
+  }

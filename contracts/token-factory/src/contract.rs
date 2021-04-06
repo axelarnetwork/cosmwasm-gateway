@@ -98,8 +98,7 @@ pub fn try_deploy_token<S: Storage, A: Api, Q: Querier>(
     }
 
     // mark intent to register token address post-initialization
-    let temp_addr = CanonicalAddr::default();
-    store_token_address(&mut deps.storage, &symbol, &temp_addr)?;
+    store_token_address(&mut deps.storage, &symbol, &CanonicalAddr::default())?;
 
     let messages: Vec<CosmosMsg> = vec![CosmosMsg::Wasm(WasmMsg::Instantiate {
         code_id: config.token_code_id,
