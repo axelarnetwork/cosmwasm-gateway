@@ -8,7 +8,7 @@ use std::ops::Deref;
 
 use cosmwasm_crypto::{secp256k1_recover_pubkey, secp256k1_verify};
 
-use axelar_gateway::{
+use axelar_gateway_contracts::{
     crypto::{InitMsg, ListVerificationsResponse, QueryMsg, VerifyResponse},
     gateway::HandleMsg,
 };

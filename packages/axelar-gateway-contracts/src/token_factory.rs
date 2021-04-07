@@ -20,10 +20,7 @@ pub enum HandleMsg {
         decimals: u8,
         cap: Uint128,
     },
-    Withdraw {
-        symbol: String,
-        address: String, // support arbitrary cross chain addresses
-    },
+
     Register {
         symbol: String,
     }
@@ -33,8 +30,8 @@ pub enum HandleMsg {
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     // GetCount returns the current count as a json-encoded number
-    GetConfig {},
-    GetTokenAddress { symbol: String },
+    Config {},
+    TokenAddress { symbol: String },
 }
 
 // We define a custom struct for each query response
@@ -46,5 +43,5 @@ pub struct ConfigResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct TokenAddressResponse {
-    pub token_address: HumanAddr,
+    pub token_addr: HumanAddr,
 }

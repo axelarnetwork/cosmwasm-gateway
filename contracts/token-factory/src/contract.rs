@@ -5,7 +5,7 @@ use cosmwasm_std::{
 
 use cw20::MinterResponse;
 
-use axelar_gateway::{
+use axelar_gateway_contracts::{
     hook::InitHook,
     token::InitMsg as TokenInitMsg,
     token_factory::{ConfigResponse, HandleMsg, InitMsg, QueryMsg, TokenAddressResponse},
@@ -67,7 +67,6 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             cap,
         } => try_deploy_token(deps, env, name, symbol, decimals, cap),
         HandleMsg::Register { symbol } => try_register_token(deps, env, symbol),
-        HandleMsg::Withdraw { symbol, address } => Ok(HandleResponse::default()),
     }
 }
 
@@ -98,8 +97,7 @@ pub fn try_deploy_token<S: Storage, A: Api, Q: Querier>(
     }
 
     // mark intent to register token address post-initialization
-    let temp_addr = CanonicalAddr::default();
-    store_token_address(&mut deps.storage, &symbol, &temp_addr)?;
+    store_token_address(&mut deps.storage, &symbol, &CanonicalAddr::default())?;
 
     let messages: Vec<CosmosMsg> = vec![CosmosMsg::Wasm(WasmMsg::Instantiate {
         code_id: config.token_code_id,
@@ -161,8 +159,8 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
     msg: QueryMsg,
 ) -> StdResult<Binary> {
     match msg {
-        QueryMsg::GetConfig {} => to_binary(&query_config(deps)?),
-        QueryMsg::GetTokenAddress { symbol } => to_binary(&query_token_address(deps, symbol)?),
+        QueryMsg::Config {} => to_binary(&query_config(deps)?),
+        QueryMsg::TokenAddress { symbol } => to_binary(&query_token_address(deps, symbol)?),
     }
 }
 
@@ -188,6 +186,6 @@ fn query_token_address<S: Storage, A: Api, Q: Querier>(
     };
 
     Ok(TokenAddressResponse {
-        token_address: token_address,
+        token_addr: token_address,
     })
 }

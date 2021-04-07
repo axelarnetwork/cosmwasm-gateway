@@ -3,51 +3,24 @@
   "title": "InitMsg",
   "type": "object",
   "required": [
+    "crypto_contract_addr",
     "owner",
-    "token_code_id"
+    "public_key"
   ],
   "properties": {
-    "init_hook": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/InitHook"
-        },
-        {
-          "type": "null"
-        }
-      ]
+    "crypto_contract_addr": {
+      "$ref": "#/definitions/HumanAddr"
     },
     "owner": {
       "$ref": "#/definitions/HumanAddr"
     },
-    "token_code_id": {
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0.0
+    "public_key": {
+      "type": "string"
     }
   },
   "definitions": {
-    "Binary": {
-      "description": "Binary is a wrapper around Vec<u8> to add base64 de/serialization with serde. It also adds some helper methods to help encode inline.\n\nThis is only needed as serde-json-{core,wasm} has a horrible encoding for Vec<u8>",
-      "type": "string"
-    },
     "HumanAddr": {
       "type": "string"
-    },
-    "InitHook": {
-      "type": "object",
-      "required": [
-        "contract_addr",
-        "msg"
-      ],
-      "properties": {
-        "contract_addr": {
-          "$ref": "#/definitions/HumanAddr"
-        },
-        "msg": {
-          "$ref": "#/definitions/Binary"
-        }
-      }
     }
   }
 }

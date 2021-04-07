@@ -11,7 +11,7 @@ use cw20_base::state::{token_info_read, balances};
 use cw20_base::msg::{MigrateMsg};
 use cw20_base::state::{token_info, MinterData, TokenInfo};
 
-use axelar_gateway::token::{InitMsg,HandleMsg,QueryMsg};
+use axelar_gateway_contracts::token::{InitMsg,HandleMsg,QueryMsg};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:cw20-base";

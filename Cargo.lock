@@ -36,7 +36,47 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 
 [[package]]
+name = "axelar-crypto"
+version = "0.1.0"
+dependencies = [
+ "axelar-gateway-contracts",
+ "cosmwasm-crypto",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cosmwasm-storage",
+ "cosmwasm-vm",
+ "hex",
+ "hex-literal",
+ "k256",
+ "rand_core",
+ "rlp",
+ "schemars",
+ "serde",
+ "sha2",
+ "sha3",
+]
+
+[[package]]
 name = "axelar-gateway"
+version = "0.1.0"
+dependencies = [
+ "axelar-crypto",
+ "axelar-gateway-contracts",
+ "cosmwasm-crypto",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cosmwasm-storage",
+ "cosmwasm-vm",
+ "k256",
+ "rand_core",
+ "schemars",
+ "serde",
+ "sha3",
+ "snafu",
+]
+
+[[package]]
+name = "axelar-gateway-contracts"
 version = "0.1.0"
 dependencies = [
  "cosmwasm-std",
@@ -51,13 +91,27 @@ dependencies = [
 name = "axelar-token"
 version = "0.1.0"
 dependencies = [
- "axelar-gateway",
+ "axelar-gateway-contracts",
  "cosmwasm-schema",
  "cosmwasm-std",
  "cosmwasm-storage",
  "cw2",
  "cw20",
  "cw20-base",
+ "schemars",
+ "serde",
+ "snafu",
+]
+
+[[package]]
+name = "axelar-token-factory"
+version = "0.1.0"
+dependencies = [
+ "axelar-gateway-contracts",
+ "cosmwasm-schema",
+ "cosmwasm-std",
+ "cosmwasm-storage",
+ "cw20",
  "schemars",
  "serde",
  "snafu",
@@ -391,27 +445,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crypto-verify"
-version = "0.1.0"
-dependencies = [
- "axelar-gateway",
- "cosmwasm-crypto",
- "cosmwasm-schema",
- "cosmwasm-std",
- "cosmwasm-storage",
- "cosmwasm-vm",
- "hex",
- "hex-literal",
- "k256",
- "rand_core",
- "rlp",
- "schemars",
- "serde",
- "sha2",
- "sha3",
-]
-
-[[package]]
 name = "curve25519-dalek"
 version = "3.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -619,25 +652,6 @@ name = "funty"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fed34cd105917e91daa4da6b3728c47b068749d6a62c59811f06ed2ac71d9da7"
-
-[[package]]
-name = "gateway"
-version = "0.1.0"
-dependencies = [
- "axelar-gateway",
- "cosmwasm-crypto",
- "cosmwasm-schema",
- "cosmwasm-std",
- "cosmwasm-storage",
- "cosmwasm-vm",
- "crypto-verify",
- "k256",
- "rand_core",
- "schemars",
- "serde",
- "sha3",
- "snafu",
-]
 
 [[package]]
 name = "gcc"
@@ -928,9 +942,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.24"
+version = "1.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e0704ee1a7e00d7bb417d0770ea303c1bccbabf0ef1667dae92b5967f5f8a71"
+checksum = "a152013215dca273577e18d2bf00fa862b89b24169fb78c4c95aeb07992c9cec"
 dependencies = [
  "unicode-xid",
 ]
@@ -1229,9 +1243,9 @@ checksum = "1e81da0851ada1f3e9d4312c704aa4f8806f0f9d69faaf8df2f3464b4a9437c2"
 
 [[package]]
 name = "syn"
-version = "1.0.67"
+version = "1.0.68"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6498a9efc342871f91cc2d0d694c674368b4ceb40f62b65a7a08c3792935e702"
+checksum = "3ce15dd3ed8aa2f8eeac4716d6ef5ab58b6b9256db41d7e1a0224c2788e8fd87"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1262,20 +1276,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "token-factory"
-version = "0.1.0"
-dependencies = [
- "axelar-gateway",
- "cosmwasm-schema",
- "cosmwasm-std",
- "cosmwasm-storage",
- "cw20",
- "schemars",
- "serde",
- "snafu",
 ]
 
 [[package]]
