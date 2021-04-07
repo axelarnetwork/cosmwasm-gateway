@@ -67,7 +67,6 @@ pub fn handle<S: Storage, A: Api, Q: Querier>(
             cap,
         } => try_deploy_token(deps, env, name, symbol, decimals, cap),
         HandleMsg::Register { symbol } => try_register_token(deps, env, symbol),
-        HandleMsg::Withdraw { symbol, address } => Ok(HandleResponse::default()),
     }
 }
 
@@ -187,6 +186,6 @@ fn query_token_address<S: Storage, A: Api, Q: Querier>(
     };
 
     Ok(TokenAddressResponse {
-        token_address: token_address,
+        token_addr: token_address,
     })
 }

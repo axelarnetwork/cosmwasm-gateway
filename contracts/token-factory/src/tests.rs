@@ -27,7 +27,7 @@ fn initialization() {
     let res = init(&mut deps, env, init_msg).unwrap();
     assert_eq!(0, res.messages.len());
 
-    let res = query(&deps, QueryMsg::GetConfig {}).unwrap();
+    let res = query(&deps, QueryMsg::Config {}).unwrap();
     let value: ConfigResponse = from_binary(&res).unwrap();
     assert_eq!(sender, value.owner);
     assert_eq!(token_code_id, value.token_code_id);
@@ -171,9 +171,9 @@ fn register() {
     let _res = handle(&mut deps, env, msg).unwrap();
 
     // do we need to test this? Query should never be called at this stage
-    let query_res = query(&deps, QueryMsg::GetTokenAddress { symbol: symbol.clone() }).unwrap();
-    let token_addr: TokenAddressResponse = from_binary(&query_res).unwrap();
-    assert_eq!(HumanAddr::default(), token_addr.token_address);
+    let query_res = query(&deps, QueryMsg::TokenAddress { symbol: symbol.clone() }).unwrap();
+    let resp: TokenAddressResponse = from_binary(&query_res).unwrap();
+    assert_eq!(HumanAddr::default(), resp.token_addr);
 
     // 2. register token contract
     let msg = HandleMsg::Register {
@@ -182,9 +182,9 @@ fn register() {
     let env = mock_env("token001", &[]);
     let _res = handle(&mut deps, env, msg.clone()).unwrap();
 
-    let query_res = query(&deps, QueryMsg::GetTokenAddress { symbol: symbol.clone() }).unwrap();
-    let token_addr: TokenAddressResponse = from_binary(&query_res).unwrap();
-    assert_eq!(HumanAddr::from("token001"), token_addr.token_address);
+    let query_res = query(&deps, QueryMsg::TokenAddress { symbol: symbol.clone() }).unwrap();
+    let resp: TokenAddressResponse = from_binary(&query_res).unwrap();
+    assert_eq!(HumanAddr::from("token001"), resp.token_addr);
 
     // attempt to register already registered token
     let env = mock_env("token002", &[]);
