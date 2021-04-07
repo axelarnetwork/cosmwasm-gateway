@@ -1,3 +1,6 @@
+import parseArgs from "minimist";
+import assert from "assert";
+import { Validator } from "jsonschema";
 import {
   dictToB64,
   LCDClient,
@@ -11,8 +14,6 @@ import {
   StdFee,
   MsgExecuteContract,
 } from "@terra-money/terra.js";
-
-import { Validator } from "jsonschema";
 import {
   contractNames,
   load_schemas,
@@ -27,20 +28,15 @@ import {
 import { executeMsgToWasmMsg, initMsgToWasmMsg } from "./wasm.js";
 import { gatewayExecuteFn } from "./contracts/gateway.js";
 import TransferApi from "./transfer.js";
-
-import { networks, connect, mnemonicKey, pubKeyFromPrivKey } from "./client.js";
-import chalk from "chalk";
-import parseArgs from "minimist";
-import assert from "assert";
+import { networks, connect, pubKeyFromPrivKey } from "./client.js";
+import { verbose, logMsg, Info, Success, Err } from "./utils.js";
 
 const validator = new Validator();
 const validate_schema = (...args) => validator.validate(...args);
 
-const Info = chalk.blueBright;
-const Success = chalk.greenBright;
-const Err = chalk.redBright;
+
 const BASE64_COMPRESSED_PUB_KEY =
-  "WzMsODQsMTA5LDQwLDEwMiwyMTEsMjI3LDEyMyw0MCwxMjAsNjYsMTk4LDU5LDEwMiwxNDYsMjUwLDQ3LDM5LDE2MiwyNDYsMTQ0LDIyNywyNiwxNjUsNTYsMTg0LDMxLDEyNSw2NCwyOSwxMTgsMTM5LDI0N10=";
+  "An4JQUJX6KTbh6CvqmDLPhe6knWdqfKYjDvkCl2QE1oc";
 
 const txMustSucceed = (r, kind = "transaction") => {
   if (isTxError(r)) {
@@ -56,10 +52,11 @@ const txMustSucceed = (r, kind = "transaction") => {
 const parseCliArgs = () =>
   parseArgs(process.argv.slice(2), {
     string: ["networkId", "gateway_addr", "factory_addr"],
-    boolean: ["store", "redeploy"],
+    boolean: ["store", "redeploy", "verbose"],
     default: {
       store: true,
-      redeploy: false,
+      redeploy: true,
+      verbsoe: false,
       networkId: "local",
       gateway_addr: "",
       factory_addr: "",
@@ -88,7 +85,6 @@ function ContractApi(client, wallet) {
           }
           console.log(`TX hash: ${Success(txResult.txhash)}`);
           contractInfos[name] = {
-            storeResult: txResult,
             codeId: getCodeId(txResult),
           };
         })
@@ -114,7 +110,7 @@ function ContractApi(client, wallet) {
       {}, // init coins
       false // migratable
     );
-    console.log(msg);
+    logMsg(msg);
 
     let tx;
     try {
@@ -147,7 +143,7 @@ function ContractApi(client, wallet) {
       contractAddr,
       handleMsg
     );
-    console.dir(msg, { depth: 10 });
+    logMsg(msg);
 
     let tx;
     try {
@@ -171,9 +167,11 @@ async function run() {
   const argv = parseCliArgs();
   let { networkId, store, redeploy, gateway_addr, factory_addr } = argv;
 
-  const client = connect(networks[networkId]);
+  const network = networks[networkId];
+  const client = connect(network);
   console.log(`Connected terra client to ${Info(networkId)} network`);
 
+  const mnemonicKey = new MnemonicKey({ mnemonic: network.mnemonic });
   const wallet = client.wallet(mnemonicKey);
 
   console.log(`Using account ${Info(wallet.key.accAddress)} as sender`);
@@ -182,24 +180,28 @@ async function run() {
   const schemas = load_schemas(contractNames);
   const binaries = load_wasm_binaries(contractNames);
 
-  let contractInfos;
+  // Load existing deployment info
+  let deployments = read_contract_infos() || {};
   if (store) {
-    contractInfos = await contractApi.store_contracts(binaries);
-    write_contract_infos(contractInfos);
+    deployments[networkId] = await contractApi.store_contracts(binaries);
+    write_contract_infos(deployments);
   } else {
-    contractInfos = read_contract_infos();
-    console.log("Using contracts:", contractInfos);
+    console.log("Using contracts:", deployments[networkId]);
   }
+  let contractInfos = deployments[networkId];
 
   // Merge schemas
-  Object.keys(schemas).forEach((name) => {
-    contractInfos[name].schemas = schemas[name];
-  });
+  // Object.keys(schemas).forEach((name) => {
+  //   contractInfos[name].schemas = schemas[name];
+  // });
 
   // Extract loaded addresses if we want to use existing contracts
   let addresses = redeploy
     ? {}
-    : Object.keys(contractInfos).reduce((a, n) => ({ ...a, [n]: contractInfos[n].address }), {});
+    : Object.keys(contractInfos).reduce(
+        (a, n) => ({ ...a, [n]: contractInfos[n].address }),
+        {}
+      );
   if (gateway_addr?.length > 0) addresses[AXELAR_GATEWAY] = gateway_addr;
   if (factory_addr?.length > 0) addresses[AXELAR_TOKEN_FACTORY] = factory_addr;
 
@@ -223,7 +225,7 @@ async function run() {
   Object.keys(addresses).forEach((name) => {
     contractInfos[name].address = addresses[name];
   });
-  write_contract_infos(contractInfos);
+  write_contract_infos(deployments);
 
   const transfer = TransferApi(
     wallet,
@@ -240,7 +242,7 @@ async function run() {
   });
   assert(res.minter == addresses[AXELAR_GATEWAY]);
 
-  const btcAddr = 'tb1qw99lg2um87u0gxx4c8k9f9h8ka0tcjcmjk92np';
+  const btcAddr = "tb1qw99lg2um87u0gxx4c8k9f9h8ka0tcjcmjk92np";
 
   // Mint, withdraw, then consolidate
   await transfer.mint(wallet.key.accAddress, "100");
@@ -265,7 +267,7 @@ async function deployAxelarTransferContracts(
 
   const logDeployed = (name, address) =>
     console.log(
-      `\n+++++ Deployed ${Info(name)} contract at ${Info(address)}\n`
+      `\nDeployed ${Info(name)} contract at ${Info(address)}\n`
     );
 
   if (!addresses[AXELAR_GATEWAY]) {
@@ -274,7 +276,7 @@ async function deployAxelarTransferContracts(
 
     addresses[AXELAR_GATEWAY] = await init_contract(AXELAR_GATEWAY, {
       owner: wallet.key.accAddress,
-      public_key: pubKeyFromPrivKey(wallet.key.privateKey).toString('base64'),
+      public_key: pubKeyFromPrivKey(wallet.key.privateKey).toString("base64"),
       crypto_contract_addr: addresses[AXELAR_CRYPTO],
     });
     logDeployed(AXELAR_GATEWAY, addresses[AXELAR_GATEWAY]);
@@ -305,7 +307,7 @@ async function deployAxelarTransferContracts(
         false // migratable
       )
     );
-    console.dir(wasmMsg, { depth: 10 });
+    logMsg(wasmMsg);
 
     await executeAsGateway([wasmMsg], [registerName]);
 
@@ -325,8 +327,7 @@ async function deployAxelarTransferContracts(
         deploy_token: tokenParams,
       })
     );
-
-    console.dir({ deployTokenMsg });
+    logMsg(deployTokenMsg);
 
     await executeAsGateway([deployTokenMsg]);
 

@@ -2,23 +2,21 @@ import { LCDClient, MsgSend, MnemonicKey, MsgInstantiateContract, MsgStoreCode }
 import secp256k1 from 'secp256k1';
 
 export const networks = {
-  // soju testnet
-  soju:{
-    URL: 'https://soju-lcd.terra.dev',
-    chainID: 'soju-0014',
+  // tequila testnet
+  tequila:{
+    URL: 'https://tequila-lcd.terra.dev',
+    chainID: 'tequila-0004',
+    mnemonic: 'dress chimney never comic novel teach fun vintage ski bird estate promote category record case seven unfold web during wagon notable hold naive scout',
   },
+
   // LocalTerra
   local: {
     URL: 'http://localhost:1317',
     chainID: 'localterra',
-    gasPrices: '0.15uluna'
+    gasPrices: '0.15uluna',
+    mnemonic: 'satisfy adjust timber high purchase tuition stool faith fine install that you unaware feed domain license impose boss human eager hat rent enjoy dawn',
   },
 };
-
-export const mnemonicKey = new MnemonicKey({
-  mnemonic: 'satisfy adjust timber high purchase tuition stool faith fine install that you unaware feed domain license impose boss human eager hat rent enjoy dawn',
-  // 'notice oak worry limit wrap speak medal online prefer cluster roof addict wrist behave treat actual wasp year salad speed social layer crew genius',
-});
 
 export const connect = (network) => new LCDClient(network);
 
