@@ -26,10 +26,10 @@ import {
   AXELAR_CRYPTO,
 } from "./contracts.js";
 import { WasmExecuteMsg, WasmInstantiateMsg } from "./wasm.js";
-import { gatewayExecuteFn } from "./contracts/gateway.js";
+import { gatewayExecuteFn, gatewayExecuteSignedFn } from "./contracts/gateway.js";
 import TransferApi from "./transfer.js";
 import { networks, connect, pubKeyFromPrivKey } from "./client.js";
-import { verbose, logMsg, Info, Success, Err } from "./utils.js";
+import { setVerbose, logMsg, Info, Success, Err } from "./utils.js";
 
 const validator = new Validator();
 const validate_schema = (...args) => validator.validate(...args);
@@ -55,7 +55,7 @@ const parseCliArgs = () =>
     default: {
       store: true,
       redeploy: true,
-      verbsoe: false,
+      verbose: false,
       networkId: "local",
       gateway_addr: "",
       factory_addr: "",
@@ -118,6 +118,7 @@ function ContractApi(client, wallet) {
       console.log(
         Err(`Failed to instantiate contract using code_id ${codeId}`)
       );
+      data && console.log(data)
       throw new Error(data);
       return;
     }
@@ -149,6 +150,7 @@ function ContractApi(client, wallet) {
       tx = await wallet.createAndSignTx({ msgs: [msg] });
     } catch ({ response: { data } }) {
       console.log(Err(`Failed to execute contract at ${contractAddr}`));
+      data && console.log(data)
       throw new Error(data);
     }
 
@@ -164,7 +166,8 @@ function ContractApi(client, wallet) {
 
 async function run() {
   const argv = parseCliArgs();
-  let { networkId, store, redeploy, gateway_addr, factory_addr } = argv;
+  let { networkId, store, redeploy, gateway_addr, factory_addr, verbose } = argv;
+  setVerbose(verbose);
 
   const network = networks[networkId];
   const client = connect(network);
@@ -276,6 +279,12 @@ async function deployAxelarTransferContracts(
     logDeployed(AXELAR_GATEWAY, addresses[AXELAR_GATEWAY]);
   }
 
+  /* const executeAsGateway = gatewayExecuteSignedFn(
+    client,
+    wallet,
+    contractApi,
+    addresses[AXELAR_GATEWAY]
+  ); */
   const executeAsGateway = gatewayExecuteFn(
     contractApi,
     addresses[AXELAR_GATEWAY]

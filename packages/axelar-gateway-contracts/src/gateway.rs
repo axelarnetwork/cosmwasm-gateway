@@ -66,7 +66,7 @@ where
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
     pub owner: HumanAddr,
-    pub public_key: Vec<u8>,
+    pub public_key: String,
     pub crypto_contract_addr: HumanAddr,
     pub nonce: u64, 
     pub mutable: bool,

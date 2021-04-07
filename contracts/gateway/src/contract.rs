@@ -1,4 +1,5 @@
 use std::fmt;
+use std::convert::TryInto;
 
 use cosmwasm_std::{
     from_binary, log, to_binary, to_vec, Api, Binary, CanonicalAddr, CosmosMsg, Empty, Env, Extern,
@@ -11,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::state::{
     read_config, read_contract_address, store_config, store_contract_address,
-    verifying_key_from_base64_str, Config,
+    verifying_key_from_base64_str, Config, base64_str_from_sec1_bytes
 };
 
 use axelar_gateway_contracts::crypto::{
@@ -182,6 +183,7 @@ pub fn handle_execute<S: Storage, A: Api, Q: Querier, T>(
 where
     T: Clone + fmt::Debug + PartialEq + JsonSchema,
 {
+    must_not_be_frozen(&deps, &env)?;
     must_be_owner(&deps, &env)?;
 
     store_registration_intent(deps, register)?;
@@ -253,6 +255,7 @@ where
     T: Clone + fmt::Debug + PartialEq + JsonSchema + Serialize,
 {
     // serialize cosmos messages into base64 encoded json
+    // todo: include contract names in digest
     let mut bytes = msgs
         .into_iter()
         .map(|msg| to_vec(&msg))
@@ -295,9 +298,14 @@ fn query_config<S: Storage, A: Api, Q: Querier>(
     deps: &Extern<S, A, Q>,
 ) -> StdResult<ConfigResponse> {
     let cfg = read_config(&deps.storage)?;
+    let point: CompressedPoint = match cfg.public_key.as_slice().try_into() {
+        Ok(p) => p,
+        Err(err) => return Err(StdError::generic_err("failed to decode public key"))
+    };
+
     Ok(ConfigResponse {
         owner: deps.api.human_address(&cfg.owner)?,
-        public_key: cfg.public_key,
+        public_key: base64_str_from_sec1_bytes(&point),
         crypto_contract_addr: deps.api.human_address(&cfg.crypto_contract_addr)?,
         nonce: cfg.nonce,
         mutable: cfg.mutable,
@@ -399,7 +407,7 @@ mod tests {
         // ensure expected config
         let expected = ConfigResponse {
             owner: axelar.clone(),
-            public_key: pub_key.to_vec(),
+            public_key: base64_str_from_sec1_bytes(&pub_key),
             crypto_contract_addr: crypto_addr.clone(),
             nonce: 0u64,
             mutable: true,

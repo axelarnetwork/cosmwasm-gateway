@@ -3,6 +3,16 @@ import {
   MsgInstantiateContract,
 } from "@terra-money/terra.js";
 
+// Create a contract execution wasm message object that can be included as a field
+// in a contract execution message.
+export const WasmExecuteMsg = (contract_addr, msg, coins) =>
+  executeMsgToWasmMsg(new MsgExecuteContract("", contract_addr, msg, coins));
+
+// Create a contract instantiation wasm message object that can be included as a field
+// in a contract execution message.
+export const WasmInstantiateMsg = (code_id, msg, coins) =>
+  initMsgToWasmMsg(new MsgInstantiateContract("", code_id, msg, coins));
+
 export function initMsgToWasmMsg(initMsg, label = "") {
   const {
     owner,
@@ -37,16 +47,6 @@ export function executeMsgToWasmMsg(execMsg) {
     },
   };
 }
-
-// Produce a contract execution wasm message object that can be included as a field
-// in a contract execution message.
-export const WasmExecuteMsg = (contract_addr, msg, coins) =>
-  executeMsgToWasmMsg(new MsgExecuteContract("", contract_addr, msg, coins));
-
-// Produce a contract instantiation wasm message object that can be included as a field
-// in a contract execution message.
-export const WasmInstantiateMsg = (code_id, msg, coins) =>
-  initMsgToWasmMsg(new MsgInstantiateContract("", code_id, msg, coins));
 
 export function RawWasmInitMsg(code_id, msg, send = {}, label = "") {
   return {

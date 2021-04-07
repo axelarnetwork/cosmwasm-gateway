@@ -6,4 +6,6 @@ export const Err = chalk.redBright;
 
 export var verbose = false;
 
+export const setVerbose = (v) => { verbose = v || false};
+
 export const logMsg = (msg, depth) => verbose ? console.dir(msg, { depth: depth || 10}) : {};
