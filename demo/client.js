@@ -1,4 +1,5 @@
 import { LCDClient, MsgSend, MnemonicKey, MsgInstantiateContract, MsgStoreCode } from '@terra-money/terra.js';
+import secp256k1 from 'secp256k1';
 
 export const networks = {
   // soju testnet
@@ -20,3 +21,11 @@ export const mnemonicKey = new MnemonicKey({
 });
 
 export const connect = (network) => new LCDClient(network);
+
+export function pubKeyFromPrivKey(privateKey) {
+    const publicKey = secp256k1.publicKeyCreate(
+      new Uint8Array(privateKey),
+      true
+    );
+    return Buffer.from(publicKey);
+}

@@ -31,17 +31,14 @@ pub struct Config {
 
 /// Convert a SEC1-encoded compressed secp256k1 point (public key bytes) to a base64 string
 pub fn base64_str_from_sec1_bytes(pub_key: &CompressedPoint) -> String {
-    let vec = &pub_key.to_vec();
-    let bin = to_binary(pub_key.as_ref()).unwrap();
-    bin.to_base64()
+    Binary::from(pub_key.to_vec().as_slice()).to_base64()
 }
 
 /// Convert a base64 string representing a SEC1-encoded compressed secp256k1 point to a verifying
 /// key.
 pub fn verifying_key_from_base64_str(pk_str: &str) -> StdResult<VerifyingKey> {
     let bin = Binary::from_base64(pk_str)?;
-    let key_vec: Vec<u8> = from_binary(&bin)?;
-    match VerifyingKey::from_sec1_bytes(key_vec.as_slice()) {
+    match VerifyingKey::from_sec1_bytes(bin.as_slice()) {
         Ok(vk) => Ok(vk),
         Err(err) => return Err(StdError::generic_err("failed to deserialize public key")),
     }

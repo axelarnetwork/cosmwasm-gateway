@@ -364,7 +364,7 @@ mod tests {
     const CANONICAL_LENGTH: usize = 20;
 
     // default localterra public key
-    const PUBLIC_KEY_BASE64_COMPRESSED: &str = "";
+    const PUBLIC_KEY_BASE64_COMPRESSED: &str = "An4JQUJX6KTbh6CvqmDLPhe6knWdqfKYjDvkCl2QE1oc";
 
     fn setup_gateway(
         mut crypto_addr: HumanAddr,
@@ -445,9 +445,9 @@ mod tests {
         assert_eq!(imp_str, pk_str);
 
         // test key created using terra.js
-        /* let verifying_key = verifying_key_from_base64_str(PUBLIC_KEY_BASE64_COMPRESSED).unwrap();
+        let verifying_key = verifying_key_from_base64_str(PUBLIC_KEY_BASE64_COMPRESSED).unwrap();
         let imp_str = base64_str_from_sec1_bytes(&verifying_key.to_bytes());
-        assert_eq!(PUBLIC_KEY_BASE64_COMPRESSED, imp_str); */
+        assert_eq!(PUBLIC_KEY_BASE64_COMPRESSED, imp_str);
     }
 
     #[test]

@@ -28,7 +28,7 @@ import { executeMsgToWasmMsg, initMsgToWasmMsg } from "./wasm.js";
 import { gatewayExecuteFn } from "./contracts/gateway.js";
 import TransferApi from "./transfer.js";
 
-import { networks, connect, mnemonicKey } from "./client.js";
+import { networks, connect, mnemonicKey, pubKeyFromPrivKey } from "./client.js";
 import chalk from "chalk";
 import parseArgs from "minimist";
 import assert from "assert";
@@ -39,7 +39,7 @@ const validate_schema = (...args) => validator.validate(...args);
 const Info = chalk.blueBright;
 const Success = chalk.greenBright;
 const Err = chalk.redBright;
-const COMPRESSED_BASE64_PUB_KEY =
+const BASE64_COMPRESSED_PUB_KEY =
   "WzMsODQsMTA5LDQwLDEwMiwyMTEsMjI3LDEyMyw0MCwxMjAsNjYsMTk4LDU5LDEwMiwxNDYsMjUwLDQ3LDM5LDE2MiwyNDYsMTQ0LDIyNywyNiwxNjUsNTYsMTg0LDMxLDEyNSw2NCwyOSwxMTgsMTM5LDI0N10=";
 
 const txMustSucceed = (r, kind = "transaction") => {
@@ -123,7 +123,7 @@ function ContractApi(client, wallet) {
       console.log(
         Err(`Failed to instantiate contract using code_id ${codeId}`)
       );
-      data && console.log(data);
+      throw new Error(data);
       return;
     }
 
@@ -154,7 +154,6 @@ function ContractApi(client, wallet) {
       tx = await wallet.createAndSignTx({ msgs: [msg] });
     } catch ({ response: { data } }) {
       console.log(Err(`Failed to execute contract at ${contractAddr}`));
-      data && console.log(data);
       throw new Error(data);
     }
 
@@ -174,7 +173,9 @@ async function run() {
 
   const client = connect(networks[networkId]);
   console.log(`Connected terra client to ${Info(networkId)} network`);
+
   const wallet = client.wallet(mnemonicKey);
+
   console.log(`Using account ${Info(wallet.key.accAddress)} as sender`);
   const contractApi = ContractApi(client, wallet);
 
@@ -273,8 +274,7 @@ async function deployAxelarTransferContracts(
 
     addresses[AXELAR_GATEWAY] = await init_contract(AXELAR_GATEWAY, {
       owner: wallet.key.accAddress,
-      // public_key: wallet.key.rawPubKey.toString('base64'),
-      public_key: COMPRESSED_BASE64_PUB_KEY,
+      public_key: pubKeyFromPrivKey(wallet.key.privateKey).toString('base64'),
       crypto_contract_addr: addresses[AXELAR_CRYPTO],
     });
     logDeployed(AXELAR_GATEWAY, addresses[AXELAR_GATEWAY]);

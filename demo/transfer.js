@@ -28,5 +28,5 @@ export default function TransferApi(wallet, client, contractApi, gatewayAddress,
     mint,
     withdraw,
     burn,
-  }
+  };
 }
