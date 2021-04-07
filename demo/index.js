@@ -24,9 +24,14 @@ import {
   AXELAR_GATEWAY,
   AXELAR_CRYPTO,
 } from "./contracts.js";
+import { executeMsgToWasmMsg, initMsgToWasmMsg } from "./wasm.js";
+import { gatewayExecuteFn } from "./contracts/gateway.js";
+import TransferApi from "./transfer.js";
+
 import { networks, connect, mnemonicKey } from "./client.js";
 import chalk from "chalk";
 import parseArgs from "minimist";
+import assert from "assert";
 
 const validator = new Validator();
 const validate_schema = (...args) => validator.validate(...args);
@@ -51,8 +56,14 @@ const txMustSucceed = (r, kind = "transaction") => {
 const parseCliArgs = () =>
   parseArgs(process.argv.slice(2), {
     string: ["networkId", "gateway_addr", "factory_addr"],
-    boolean: ["store"],
-    default: { store: true, networkId: "local", gateway_addr: "", factory_addr: "" },
+    boolean: ["store", "redeploy"],
+    default: {
+      store: true,
+      redeploy: false,
+      networkId: "local",
+      gateway_addr: "",
+      factory_addr: "",
+    },
   });
 
 function ContractApi(client, wallet) {
@@ -136,7 +147,7 @@ function ContractApi(client, wallet) {
       contractAddr,
       handleMsg
     );
-    console.dir(msg);
+    console.dir(msg, { depth: 10 });
 
     let tx;
     try {
@@ -144,13 +155,10 @@ function ContractApi(client, wallet) {
     } catch ({ response: { data } }) {
       console.log(Err(`Failed to execute contract at ${contractAddr}`));
       data && console.log(data);
-      throw new Error(data)
+      throw new Error(data);
     }
 
-    const txRes = txMustSucceed(await client.tx.broadcast(tx), "execute");
-
-    const contractAddress = getContractAddress(txRes);
-    return contractAddress;
+    return txMustSucceed(await client.tx.broadcast(tx), "execute");
   }
 
   return {
@@ -160,50 +168,9 @@ function ContractApi(client, wallet) {
   };
 }
 
-function initMsgToWasmMsg(initMsg, label = "") {
-  const {
-    owner,
-    code_id,
-    init_msg,
-    init_coins,
-    migratable,
-  } = initMsg.toData().value;
-
-  return {
-    wasm: {
-      instantiate: {
-        code_id: +code_id,
-        msg: init_msg,
-        send: init_coins,
-        label: label,
-      },
-    },
-  };
-}
-
-function executeMsgToWasmMsg(execMsg) {
-  const {
-    sender,
-    contract,
-    execute_msg,
-    coins,
-  } = execMsg.toData().value;
-
-  return {
-    wasm: {
-      execute: {
-        msg: execute_msg,
-        contract_addr: contract,
-        send: coins,
-      },
-    },
-  };
-}
-
 async function run() {
   const argv = parseCliArgs();
-  console.log({ argv: argv });
-  let { networkId, store, gateway_addr, factory_addr } = argv;
+  let { networkId, store, redeploy, gateway_addr, factory_addr } = argv;
 
   const client = connect(networks[networkId]);
   console.log(`Connected terra client to ${Info(networkId)} network`);
@@ -227,20 +194,67 @@ async function run() {
     contractInfos[name].schemas = schemas[name];
   });
 
-  let addresses = {};
-  if (gateway_addr?.length > 0) addresses.gateway = gateway_addr;
-  if (factory_addr?.length > 0) addresses.tokenFactory = factory_addr;
+  let addresses = redeploy
+    ? {}
+    : Object.keys(contractInfos).reduce(
+        (a, n) => ({ ...a, [n]: contractInfos[n].address }),
+        {}
+      );
+  if (gateway_addr?.length > 0) addresses[AXELAR_GATEWAY] = gateway_addr;
+  if (factory_addr?.length > 0) addresses[AXELAR_TOKEN_FACTORY] = factory_addr;
 
-  addresses = await deployAxelarTransferContracts(wallet, client, contractApi, contractInfos, addresses);
-  console.log({ addresses });
+  const tokenParams = {
+    name: "Satoshi",
+    symbol: "satoshi",
+    decimals: 8,
+    cap: "1000000",
+  };
+
+  addresses = await deployAxelarTransferContracts(
+    wallet,
+    client,
+    contractApi,
+    contractInfos,
+    tokenParams,
+    addresses
+  );
+
+  Object.keys(addresses).forEach((name) => {
+    contractInfos[name].address = addresses[name];
+  });
+  write_contract_infos(contractInfos);
+
+  const transfer = TransferApi(
+    wallet,
+    client,
+    contractApi,
+    addresses[AXELAR_GATEWAY],
+    tokenParams,
+    addresses[AXELAR_TOKEN]
+  );
+
+  // Confirm gateway is minter
+  let res = await client.wasm.contractQuery(addresses[AXELAR_TOKEN], {
+    minter: {},
+  });
+  assert(res.minter == addresses[AXELAR_GATEWAY]);
+
+  await transfer.mint(wallet.key.accAddress, "100");
 }
 
-async function deployAxelarTransferContracts(wallet, client, contractApi, contractInfos, addresses = {}) {
+async function deployAxelarTransferContracts(
+  wallet,
+  client,
+  contractApi,
+  contractInfos,
+  tokenParams,
+  addresses = {}
+) {
   const init_contract = (name, initMsg) =>
     contractApi.instantiate_contract(
       contractInfos[name].codeId,
-      initMsg,
-      contractInfos[name].schemas.init_msg
+      initMsg
+      //contractInfos[name].schemas.init_msg
     );
 
   const logDeployed = (name, address) =>
@@ -248,99 +262,83 @@ async function deployAxelarTransferContracts(wallet, client, contractApi, contra
       `\n+++++ Deployed ${Info(name)} contract at ${Info(address)}\n`
     );
 
-  if (!addresses.gateway) {
-    addresses.crypto = await init_contract(AXELAR_CRYPTO, {});
-    logDeployed(AXELAR_CRYPTO, addresses.crypto);
+  if (!addresses[AXELAR_GATEWAY]) {
+    addresses[AXELAR_CRYPTO] = await init_contract(AXELAR_CRYPTO, {});
+    logDeployed(AXELAR_CRYPTO, addresses[AXELAR_CRYPTO]);
 
-    addresses.gateway = await init_contract(AXELAR_GATEWAY, {
+    addresses[AXELAR_GATEWAY] = await init_contract(AXELAR_GATEWAY, {
       owner: wallet.key.accAddress,
       // public_key: wallet.key.rawPubKey.toString('base64'),
       public_key: COMPRESSED_BASE64_PUB_KEY,
-      crypto_contract_addr: addresses.crypto,
+      crypto_contract_addr: addresses[AXELAR_CRYPTO],
     });
-    logDeployed(AXELAR_GATEWAY, addresses.gateway);
+    logDeployed(AXELAR_GATEWAY, addresses[AXELAR_GATEWAY]);
   }
+
+  const executeAsGateway = gatewayExecuteFn(
+    contractApi,
+    addresses[AXELAR_GATEWAY]
+  );
 
   // Deploy and register the token factory
-  if (!addresses.tokenFactory) {
+  if (!addresses[AXELAR_TOKEN_FACTORY]) {
     const registerName = AXELAR_TOKEN_FACTORY;
     console.log(`Deploying token factory, registered as '${registerName}'`);
-    const tokenFactoryInitMsg = new MsgInstantiateContract(
-      addresses.gateway,
-      parseInt(contractInfos[AXELAR_TOKEN_FACTORY].codeId),
-      {
-        owner: addresses.gateway,
-        token_code_id: parseInt(contractInfos[AXELAR_TOKEN].codeId),
-        init_hook: {
-          contract_addr: addresses.gateway,
-          msg: dictToB64({ register: { name: registerName } }),
+    const wasmMsg = initMsgToWasmMsg(
+      new MsgInstantiateContract(
+        addresses[AXELAR_GATEWAY],
+        parseInt(contractInfos[AXELAR_TOKEN_FACTORY].codeId),
+        {
+          owner: addresses[AXELAR_GATEWAY],
+          token_code_id: parseInt(contractInfos[AXELAR_TOKEN].codeId),
+          init_hook: {
+            contract_addr: addresses[AXELAR_GATEWAY],
+            msg: dictToB64({ register: { name: registerName } }),
+          },
         },
-      },
-      {}, // init coins
-      false // migratable
+        {}, // init coins
+        false // migratable
+      )
     );
-    console.log({ tokenFactoryInitMsg });
-
-    const wasmMsg = initMsgToWasmMsg(tokenFactoryInitMsg);
     console.dir(wasmMsg, { depth: 10 });
 
-    await contractApi.execute_contract(
-      addresses.gateway,
-      {
-        execute: { msgs: [wasmMsg], register: [registerName], },
-      },
-      contractInfos[AXELAR_GATEWAY].schemas.handle_msg
-    );
+    await executeAsGateway([wasmMsg], [registerName]);
 
-    let { contract_addr } = await client.wasm.contractQuery(
-      addresses.gateway,
-      { contract_address: { name: registerName } } // query msg
-    );
-    addresses.tokenFactory = contract_addr;
-    logDeployed(AXELAR_TOKEN_FACTORY, addresses.tokenFactory);
+    addresses[AXELAR_TOKEN_FACTORY] = (
+      await client.wasm.contractQuery(
+        addresses[AXELAR_GATEWAY],
+        { contract_address: { name: registerName } } // query msg
+      )
+    ).contract_addr;
+    logDeployed(AXELAR_TOKEN_FACTORY, addresses[AXELAR_TOKEN_FACTORY]);
   }
 
+  if (!addresses[AXELAR_TOKEN]) {
+    // Deploy a CW20 token
+    const deployTokenMsg = executeMsgToWasmMsg(
+      new MsgExecuteContract("", addresses[AXELAR_TOKEN_FACTORY], {
+        deploy_token: tokenParams,
+      })
+    );
 
-  // Deploy a CW20 token
-  const tokenParams = {
-        name: 'Satoshi',
-        symbol: 'satoshi',
-        decimals: 8,
-        cap: '1000000',
-      };
+    console.dir({ deployTokenMsg });
 
-  const deployTokenMsg = executeMsgToWasmMsg(new MsgExecuteContract(
-    '',
-    addresses.tokenFactory,
-    { deploy_token:  tokenParams }
-  ));
+    await executeAsGateway([deployTokenMsg]);
 
-  console.dir({deployTokenMsg})
-
-  await contractApi.execute_contract(
-    addresses.gateway,
-    {
-      execute: {
-        msgs: [deployTokenMsg],
-        register: [],
-      },
-    },
-    contractInfos[AXELAR_GATEWAY].schemas.handle_msg
-  );
-  addresses.satoshiToken = (await client.wasm.contractQuery(
-    addresses.tokenFactory,
-    { token_address: { symbol: tokenParams.symbol } }
-  )).token_addr;
-  logDeployed(AXELAR_TOKEN, addresses.satoshiToken);
+    // Retrieve token contract address from token factory
+    addresses[AXELAR_TOKEN] = (
+      await client.wasm.contractQuery(addresses[AXELAR_TOKEN_FACTORY], {
+        token_address: { symbol: tokenParams.symbol },
+      })
+    ).token_addr;
+    logDeployed(AXELAR_TOKEN, addresses[AXELAR_TOKEN]);
+  }
 
   return addresses;
 }
 
-async function gatewayProxyExecute(contractApi, wasmMsgs, registerNames) {
-}
-
 async function assertCanInitToken(init_contract, wallet) {
-  const token_addr = await init_contract("axelar_token", {
+  const token_addr = await init_contract(AXELAR_TOKEN, {
     owner: wallet.key.accAddress,
     name: "Satoshi",
     symbol: "satoshi",
@@ -356,12 +354,11 @@ async function assertCanInitToken(init_contract, wallet) {
 }
 
 async function assertCanInitTokenFactory(init_contract, wallet, contractInfos) {
-  const token_factory_addr = await init_contract("axelar_token_factory", {
+  const token_factory_addr = await init_contract(AXELAR_TOKEN_FACTORY, {
     owner: wallet.key.accAddress,
-    token_code_id: parseInt(contractInfos["axelar_token"].codeId),
+    token_code_id: parseInt(contractInfos[AXELAR_TOKEN].codeId),
   });
   return true;
 }
 
 run().catch(console.log);
-

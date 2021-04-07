@@ -35,14 +35,18 @@ export const load_schemas = (names) =>
 
 const infosPath = "./contract_info.json";
 
-export const write_contract_infos = (contractInfos) => {
+export const write_contract_infos = (contractInfos, props = ['codeId', 'address']) => {
   const out = Object.keys(contractInfos).reduce((out, name) => {
-    const { codeId } = contractInfos[name]; // select properties we wish to write
-    out[name] = { codeId };
+    out[name] = props.reduce((contract, prop) => {
+      const val = contractInfos[name][prop];
+      if(val !== undefined) contract[prop] = val;
+      return contract;
+    }, Object.create(null));
+
     return out;
   }, Object.create(null));
 
-  fs.writeFileSync(infosPath, JSON.stringify(out));
+  fs.writeFileSync(infosPath, JSON.stringify(out, null, 2));
 };
 
 export const read_contract_infos = () => {
