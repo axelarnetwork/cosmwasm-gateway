@@ -25,7 +25,7 @@ import {
   AXELAR_GATEWAY,
   AXELAR_CRYPTO,
 } from "./contracts.js";
-import { executeMsgToWasmMsg, initMsgToWasmMsg } from "./wasm.js";
+import { WasmExecuteMsg, WasmInstantiateMsg } from "./wasm.js";
 import { gatewayExecuteFn } from "./contracts/gateway.js";
 import TransferApi from "./transfer.js";
 import { networks, connect, pubKeyFromPrivKey } from "./client.js";
@@ -33,7 +33,6 @@ import { verbose, logMsg, Info, Success, Err } from "./utils.js";
 
 const validator = new Validator();
 const validate_schema = (...args) => validator.validate(...args);
-
 
 const BASE64_COMPRESSED_PUB_KEY =
   "An4JQUJX6KTbh6CvqmDLPhe6knWdqfKYjDvkCl2QE1oc";
@@ -198,10 +197,7 @@ async function run() {
   // Extract loaded addresses if we want to use existing contracts
   let addresses = redeploy
     ? {}
-    : Object.keys(contractInfos).reduce(
-        (a, n) => ({ ...a, [n]: contractInfos[n].address }),
-        {}
-      );
+    : Object.keys(contractInfos).reduce((a, n) => ({ ...a, [n]: contractInfos[n].address }), {});
   if (gateway_addr?.length > 0) addresses[AXELAR_GATEWAY] = gateway_addr;
   if (factory_addr?.length > 0) addresses[AXELAR_TOKEN_FACTORY] = factory_addr;
 
@@ -266,9 +262,7 @@ async function deployAxelarTransferContracts(
     );
 
   const logDeployed = (name, address) =>
-    console.log(
-      `\nDeployed ${Info(name)} contract at ${Info(address)}\n`
-    );
+    console.log(`\nDeployed ${Info(name)} contract at ${Info(address)}\n`);
 
   if (!addresses[AXELAR_GATEWAY]) {
     addresses[AXELAR_CRYPTO] = await init_contract(AXELAR_CRYPTO, {});
@@ -291,9 +285,8 @@ async function deployAxelarTransferContracts(
   if (!addresses[AXELAR_TOKEN_FACTORY]) {
     const registerName = AXELAR_TOKEN_FACTORY;
     console.log(`Deploying token factory, registered as '${registerName}'`);
-    const wasmMsg = initMsgToWasmMsg(
-      new MsgInstantiateContract(
-        addresses[AXELAR_GATEWAY],
+
+    const wasmMsg = WasmInstantiateMsg(
         parseInt(contractInfos[AXELAR_TOKEN_FACTORY].codeId),
         {
           owner: addresses[AXELAR_GATEWAY],
@@ -303,10 +296,7 @@ async function deployAxelarTransferContracts(
             msg: dictToB64({ register: { name: registerName } }),
           },
         },
-        {}, // init coins
-        false // migratable
-      )
-    );
+      );
     logMsg(wasmMsg);
 
     await executeAsGateway([wasmMsg], [registerName]);
@@ -322,11 +312,7 @@ async function deployAxelarTransferContracts(
 
   if (!addresses[AXELAR_TOKEN]) {
     // Deploy a CW20 token
-    const deployTokenMsg = executeMsgToWasmMsg(
-      new MsgExecuteContract("", addresses[AXELAR_TOKEN_FACTORY], {
-        deploy_token: tokenParams,
-      })
-    );
+    const deployTokenMsg = WasmExecuteMsg(addresses[AXELAR_TOKEN_FACTORY], { deploy_token: tokenParams });
     logMsg(deployTokenMsg);
 
     await executeAsGateway([deployTokenMsg]);
