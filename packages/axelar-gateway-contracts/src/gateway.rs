@@ -48,7 +48,11 @@ pub enum QueryMsg<T = Empty>
 where
     T: Clone + fmt::Debug + PartialEq + JsonSchema,
 {
+    /// Retrieve the contract's configuration
     Config {},
+
+    /// Retrieve the address of a registered contract
+    ContractAddress { name: String },
 
     /// Checks permissions of the caller on this proxy.
     /// If CanSend returns true then a call to `Execute` with the same message,

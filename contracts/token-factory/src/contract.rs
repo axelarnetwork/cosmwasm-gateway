@@ -160,8 +160,8 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
     msg: QueryMsg,
 ) -> StdResult<Binary> {
     match msg {
-        QueryMsg::GetConfig {} => to_binary(&query_config(deps)?),
-        QueryMsg::GetTokenAddress { symbol } => to_binary(&query_token_address(deps, symbol)?),
+        QueryMsg::Config {} => to_binary(&query_config(deps)?),
+        QueryMsg::TokenAddress { symbol } => to_binary(&query_token_address(deps, symbol)?),
     }
 }
 

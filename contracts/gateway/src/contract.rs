@@ -286,6 +286,7 @@ pub fn query<S: Storage, A: Api, Q: Querier>(
 ) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => to_binary(&query_config(deps)?),
+        QueryMsg::ContractAddress { name } => to_binary(&query_contract_address(deps, name)?),
         QueryMsg::CanSend { sig, msgs } => to_binary(&query_can_send(deps, msgs, sig)?),
     }
 }
