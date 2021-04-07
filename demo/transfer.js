@@ -12,10 +12,16 @@ export default function TransferApi(wallet, client, contractApi, gatewayAddress,
     console.log(`Minted ${amount} ${tokenParams.symbol} to ${recipient}`)
   }
 
-  async function withdraw(recipient, amount) {
+  async function withdraw(crossChainAddr, amount) {
+    await contractApi.execute_contract(tokenAddress, { withdraw: { recipient: crossChainAddr, amount }});
+    console.log(`Withdrew ${amount} ${tokenParams.symbol} to ${crossChainAddr}`)
   }
 
-  async function burn(recipient, amount) {
+  async function burn(amount) {
+    const msg = WasmExecuteMsg(tokenAddress, { burn: { amount }});
+    console.dir({ mintMsg: msg }, {depth: 10})
+    await executeAsGateway([msg]);
+    console.log(`Burned ${amount} ${tokenParams.symbol}`)
   }
 
   return {

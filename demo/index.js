@@ -190,16 +190,15 @@ async function run() {
     console.log("Using contracts:", contractInfos);
   }
 
+  // Merge schemas
   Object.keys(schemas).forEach((name) => {
     contractInfos[name].schemas = schemas[name];
   });
 
+  // Extract loaded addresses if we want to use existing contracts
   let addresses = redeploy
     ? {}
-    : Object.keys(contractInfos).reduce(
-        (a, n) => ({ ...a, [n]: contractInfos[n].address }),
-        {}
-      );
+    : Object.keys(contractInfos).reduce((a, n) => ({ ...a, [n]: contractInfos[n].address }), {});
   if (gateway_addr?.length > 0) addresses[AXELAR_GATEWAY] = gateway_addr;
   if (factory_addr?.length > 0) addresses[AXELAR_TOKEN_FACTORY] = factory_addr;
 
@@ -219,6 +218,7 @@ async function run() {
     addresses
   );
 
+  // Merge addresses
   Object.keys(addresses).forEach((name) => {
     contractInfos[name].address = addresses[name];
   });
@@ -233,13 +233,18 @@ async function run() {
     addresses[AXELAR_TOKEN]
   );
 
-  // Confirm gateway is minter
+  // Assert gateway is the authorized token minter
   let res = await client.wasm.contractQuery(addresses[AXELAR_TOKEN], {
     minter: {},
   });
   assert(res.minter == addresses[AXELAR_GATEWAY]);
 
+  const btcAddr = 'tb1qw99lg2um87u0gxx4c8k9f9h8ka0tcjcmjk92np';
+
+  // Mint, withdraw, then consolidate
   await transfer.mint(wallet.key.accAddress, "100");
+  await transfer.withdraw(btcAddr, "100");
+  await transfer.burn("100");
 }
 
 async function deployAxelarTransferContracts(
