@@ -1,4 +1,4 @@
-import parseArgs from "minimist";
+import parseArgv from "minimist";
 import assert from "assert";
 import { Validator } from "jsonschema";
 import {
@@ -18,18 +18,18 @@ import {
   contractNames,
   load_schemas,
   load_wasm_binaries,
-  write_contract_infos,
-  read_contract_infos,
+  write_deployments,
+  read_deployments,
   AXELAR_TOKEN_FACTORY,
   AXELAR_TOKEN,
   AXELAR_GATEWAY,
   AXELAR_CRYPTO,
 } from "./contracts.js";
-import { WasmExecuteMsg, WasmInstantiateMsg } from "./wasm.js";
-import { gatewayExecuteFn, gatewayExecuteSignedFn } from "./contracts/gateway.js";
-import TransferApi from "./transfer.js";
 import { networks, connect, pubKeyFromPrivKey } from "./client.js";
 import { setVerbose, logMsg, Info, Success, Err } from "./utils.js";
+import { WasmExecuteMsg, WasmInstantiateMsg } from "./wasm.js";
+import { gatewayExecuteFn, gatewayExecuteSignedFn } from "./contracts/gateway.js";
+import TokenApi from "./contracts/token.js";
 
 const validator = new Validator();
 const validate_schema = (...args) => validator.validate(...args);
@@ -49,12 +49,13 @@ const txMustSucceed = (r, kind = "transaction") => {
 };
 
 const parseCliArgs = () =>
-  parseArgs(process.argv.slice(2), {
+  parseArgv(process.argv.slice(2), {
     string: ["networkId", "gateway_addr", "factory_addr"],
-    boolean: ["store", "redeploy", "verbose"],
+    boolean: ["store", "redeploy", "verbose", "metatx"],
     default: {
       store: true,
       redeploy: true,
+      metatx: false,
       verbose: false,
       networkId: "local",
       gateway_addr: "",
@@ -166,7 +167,7 @@ function ContractApi(client, wallet) {
 
 async function run() {
   const argv = parseCliArgs();
-  let { networkId, store, redeploy, gateway_addr, factory_addr, verbose } = argv;
+  let { networkId, store, redeploy, gateway_addr, factory_addr, verbose, metatx } = argv;
   setVerbose(verbose);
 
   const network = networks[networkId];
@@ -183,24 +184,19 @@ async function run() {
   const binaries = load_wasm_binaries(contractNames);
 
   // Load existing deployment info
-  let deployments = read_contract_infos() || {};
+  let deployments = read_deployments();
   if (store) {
     deployments[networkId] = await contractApi.store_contracts(binaries);
-    write_contract_infos(deployments);
+    write_deployments(deployments);
   } else {
     console.log("Using contracts:", deployments[networkId]);
   }
-  let contractInfos = deployments[networkId];
-
-  // Merge schemas
-  // Object.keys(schemas).forEach((name) => {
-  //   contractInfos[name].schemas = schemas[name];
-  // });
+  let contractsInfo = deployments[networkId];
 
   // Extract loaded addresses if we want to use existing contracts
   let addresses = redeploy
     ? {}
-    : Object.keys(contractInfos).reduce((a, n) => ({ ...a, [n]: contractInfos[n].address }), {});
+    : Object.keys(contractsInfo).reduce((a, n) => ({ ...a, [n]: contractsInfo[n].address }), {});
   if (gateway_addr?.length > 0) addresses[AXELAR_GATEWAY] = gateway_addr;
   if (factory_addr?.length > 0) addresses[AXELAR_TOKEN_FACTORY] = factory_addr;
 
@@ -215,30 +211,38 @@ async function run() {
     wallet,
     client,
     contractApi,
-    contractInfos,
+    contractsInfo,
     tokenParams,
-    addresses
+    addresses,
+    { metatx }
   );
 
   // Merge addresses
   Object.keys(addresses).forEach((name) => {
-    contractInfos[name].address = addresses[name];
+    contractsInfo[name].address = addresses[name];
   });
-  write_contract_infos(deployments);
+  write_deployments(deployments);
 
-  const transfer = TransferApi(
-    wallet,
-    client,
-    contractApi,
-    addresses[AXELAR_GATEWAY],
+  const executeAsGateway = metatx
+    ? gatewayExecuteSignedFn(
+      client,
+      wallet,
+      contractApi,
+      addresses[AXELAR_GATEWAY]
+    )
+    : gatewayExecuteFn(
+      contractApi,
+      addresses[AXELAR_GATEWAY]
+    );
+
+  const transfer = TokenApi( wallet, client, contractApi)(
+    executeAsGateway,
     tokenParams,
     addresses[AXELAR_TOKEN]
   );
 
   // Assert gateway is the authorized token minter
-  let res = await client.wasm.contractQuery(addresses[AXELAR_TOKEN], {
-    minter: {},
-  });
+  let res = await client.wasm.contractQuery(addresses[AXELAR_TOKEN], { minter: {} });
   assert(res.minter == addresses[AXELAR_GATEWAY]);
 
   const btcAddr = "tb1qw99lg2um87u0gxx4c8k9f9h8ka0tcjcmjk92np";
@@ -253,15 +257,18 @@ async function deployAxelarTransferContracts(
   wallet,
   client,
   contractApi,
-  contractInfos,
+  contractsInfo,
   tokenParams,
-  addresses = {}
+  addresses = {},
+  opts = {},
 ) {
+  const { metatx } = opts;
+
   const init_contract = (name, initMsg) =>
     contractApi.instantiate_contract(
-      contractInfos[name].codeId,
+      contractsInfo[name].codeId,
       initMsg
-      //contractInfos[name].schemas.init_msg
+      //contractsInfo[name].schemas.init_msg
     );
 
   const logDeployed = (name, address) =>
@@ -279,16 +286,17 @@ async function deployAxelarTransferContracts(
     logDeployed(AXELAR_GATEWAY, addresses[AXELAR_GATEWAY]);
   }
 
-  /* const executeAsGateway = gatewayExecuteSignedFn(
-    client,
-    wallet,
-    contractApi,
-    addresses[AXELAR_GATEWAY]
-  ); */
-  const executeAsGateway = gatewayExecuteFn(
-    contractApi,
-    addresses[AXELAR_GATEWAY]
-  );
+  const executeAsGateway = metatx
+    ? gatewayExecuteSignedFn(
+      client,
+      wallet,
+      contractApi,
+      addresses[AXELAR_GATEWAY]
+    )
+    : gatewayExecuteFn(
+      contractApi,
+      addresses[AXELAR_GATEWAY]
+    );
 
   // Deploy and register the token factory
   if (!addresses[AXELAR_TOKEN_FACTORY]) {
@@ -296,10 +304,10 @@ async function deployAxelarTransferContracts(
     console.log(`Deploying token factory, registered as '${registerName}'`);
 
     const wasmMsg = WasmInstantiateMsg(
-        parseInt(contractInfos[AXELAR_TOKEN_FACTORY].codeId),
+        parseInt(contractsInfo[AXELAR_TOKEN_FACTORY].codeId),
         {
           owner: addresses[AXELAR_GATEWAY],
-          token_code_id: parseInt(contractInfos[AXELAR_TOKEN].codeId),
+          token_code_id: parseInt(contractsInfo[AXELAR_TOKEN].codeId),
           init_hook: {
             contract_addr: addresses[AXELAR_GATEWAY],
             msg: dictToB64({ register: { name: registerName } }),

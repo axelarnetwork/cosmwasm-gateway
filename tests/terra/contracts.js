@@ -1,7 +1,7 @@
 import * as fs from "fs";
 
-const wasmDir = "../artifacts/";
-const contractsDir = "../contracts/";
+const wasmDir = "../../artifacts/";
+const contractsDir = "../../contracts/";
 
 export const AXELAR_CRYPTO = "axelar_crypto";
 export const AXELAR_GATEWAY = "axelar_gateway";
@@ -33,13 +33,19 @@ export const load_schemas = (names) =>
     return contracts;
   }, Object.create(null));
 
-const infosPath = "./contract_info.json";
+const deploymentsPath = "./deployments.json";
 
-// todo: fix this 
-export const write_contract_infos = (infos) => {
-  fs.writeFileSync(infosPath, JSON.stringify(infos, null, 2));
+// Merge schemas
+export const merge_schemas = (contractInfo, schemas) =>
+  Object.keys(schemas).forEach((name) => {
+    contractInfos[name].schemas = schemas[name];
+  });
+
+// deployments: { [network]: { [contract]: {} } }
+export const write_deployments = (infos, path = deploymentsPath) => {
+  fs.writeFileSync(path, JSON.stringify(infos, null, 2));
 };
 
-export const read_contract_infos = () => {
-  return JSON.parse(fs.readFileSync(infosPath).toString());
+export const read_deployments = (path = deploymentsPath) => {
+  return fs.existsSync(path) ? JSON.parse(fs.readFileSync(path).toString()) : {};
 };

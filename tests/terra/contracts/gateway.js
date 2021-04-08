@@ -48,7 +48,7 @@ export const gatewayExecuteSignedFn = (
       execute_signed: {
         msgs: [...wasmMsgs],
         register: [...registerNames],
-        sig: new Uint8Array(sig.buffer),
+        sig: sig.toJSON().data,
       },
     },
     handleSchema
