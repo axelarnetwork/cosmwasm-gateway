@@ -109,7 +109,7 @@ mod tests {
     const SECP256K1_PUBLIC_KEY_HEX: &str = "04051c1ee2190ecfb174bfe4f90763f2b4ff7517b70a2aec1876ebcfd644c4633fb03f3cfbd94b1f376e34592d9d41ccaf640bb751b00a1fadeb0c01157769eb73";
 
     #[test]
-    fn comsos_verify_message_batch() {
+    fn cosmos_verify_message_batch() {
         // Signing
         let signing_key = SigningKey::random(&mut OsRng); // Serialize with `::to_bytes()`
         let pub_key = VerifyingKey::from(&signing_key); // Serialize with `::to_encoded_point()`
